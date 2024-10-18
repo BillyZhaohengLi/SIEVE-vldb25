@@ -1,4 +1,4 @@
-Repository for NeoDance: Near-Optimal Index Collection for Filtered Vector Search
+# Repository for NeoDance: Near-Optimal Index Collection for Filtered Vector Search
 
 ## Project structure:
 * `hnswtest`: clone of hnswlib, contains NeoDance's implementation
