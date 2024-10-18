@@ -1,0 +1,198 @@
+random-filter-s:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": 'yfcc10M-filters.pkl', 
+              "T": 8,
+              "cutoff": 10000,
+              "max_iter": 10,
+              "weight_classes": [100000, 400000],
+              "build_params": [{"max_degree": 8,
+                                "limit": 200,
+                                "alpha": 1.175},
+                              {"max_degree": 10,
+                               "limit": 200,
+                               "alpha": 1.175},
+                              {"max_degree": 12,
+                               "limit": 200,
+                               "alpha": 1.175}],
+              "bitvector_cutoff": 10000
+            }]
+          query-args: |
+            [{"target_points": 15000,
+              "tiny_cutoff": 60000,
+              "beam_widths": [70, 70, 70]
+              }]
+
+yfcc-10M:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "yfcc10M-filters.pkl", 
+              "historical_filters_percentage": 0.25,
+              "is_and": "True",
+              "M": 16,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 1000000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+paper:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "paper-filters.pkl", 
+              "historical_filters_percentage": 0.25,
+              "is_and": "True",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+uqv:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "uqv_query_attrs.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "False",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+sift:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "sift_query_attrs.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "False",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+msong:
+    neodance:
+      docker-tag: neurips23-filter-neodance
+      module: neurips23.filter.neodance.neodance
+      constructor: NeoDance
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "msong_query_attrs.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "False",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]

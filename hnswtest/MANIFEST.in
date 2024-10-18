@@ -1,0 +1,3 @@
+include hnswlib/*.h
+include LICENSE
+include /usr/local/lib/libfaiss.so

@@ -1,0 +1,199 @@
+random-filter-s:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"cluster_size": 5000, 
+              "T": 8,
+              "cutoff": 10000,
+              "max_iter": 10,
+              "weight_classes": [100000, 400000],
+              "build_params": [{"max_degree": 8,
+                                "limit": 200,
+                                "alpha": 1.175},
+                              {"max_degree": 10,
+                               "limit": 200,
+                               "alpha": 1.175},
+                              {"max_degree": 12,
+                               "limit": 200,
+                               "alpha": 1.175}],
+              "bitvector_cutoff": 10000
+            }]
+          query-args: |
+            [{"target_points": 15000,
+              "tiny_cutoff": 60000,
+              "beam_widths": [70, 70, 70]
+              }]
+
+yfcc-10M:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "True",
+              "M": 32,
+              "gamma": 1,
+              "m_beta": 32,
+              "bruteforce_selectivity_threshold": 1,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+paper:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "True",
+              "M": 32,
+              "gamma": 1,
+              "m_beta": 32,
+              "bruteforce_selectivity_threshold": 0.005,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+uqv:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "M": 32,
+              "gamma": 1,
+              "m_beta": 32,
+              "bruteforce_selectivity_threshold": 0.005,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+sift:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "M": 32,
+              "gamma": 1,
+              "m_beta": 32,
+              "bruteforce_selectivity_threshold": 0.005,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+
+msong:
+    acornone:
+      docker-tag: neurips23-filter-acornone
+      module: neurips23.filter.acornone.acornone
+      constructor: AcornOne
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "M": 32,
+              "gamma": 1,
+              "m_beta": 32,
+              "bruteforce_selectivity_threshold": 1,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 510}]
+

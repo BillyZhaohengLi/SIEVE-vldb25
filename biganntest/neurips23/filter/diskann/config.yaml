@@ -1,0 +1,67 @@
+sift:
+    diskann:
+      docker-tag: neurips23-filter-diskann
+      module: neurips23.filter.diskann.diskann
+      constructor: Diskann
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "sift_query_attrs.pkl",
+              "historical_filters_percentage": 1,
+              "is_and": "False",
+              "M": 16,
+              "ef_construction": 40,
+              "index_budget": 1,
+              "bitvector_cutoff": 200,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"complexity": 10},
+            {"complexity": 60},
+            {"complexity": 110},
+            {"complexity": 160},
+            {"complexity": 210},
+            {"complexity": 260},
+            {"complexity": 310},
+            {"complexity": 360},
+            {"complexity": 410},
+            {"complexity": 460},
+            {"complexity": 510}]
+
+
+msong:
+    diskann:
+      docker-tag: neurips23-filter-diskann
+      module: neurips23.filter.diskann.diskann
+      constructor: Diskann
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "msong_query_attrs.pkl",
+              "historical_filters_percentage": 1,
+              "is_and": "False",
+              "M": 16,
+              "ef_construction": 40,
+              "index_budget": 1,
+              "bitvector_cutoff": 200,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"complexity": 10},
+            {"complexity": 60},
+            {"complexity": 110},
+            {"complexity": 160},
+            {"complexity": 210},
+            {"complexity": 260},
+            {"complexity": 310},
+            {"complexity": 360},
+            {"complexity": 410},
+            {"complexity": 460},
+            {"complexity": 510}]
+
