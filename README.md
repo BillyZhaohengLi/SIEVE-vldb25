@@ -6,7 +6,7 @@
 * `data_query_attr_generators`: our code for generating data attributes and query filters for the 4 datasets (Paper, UQV, Sift, MSONG).
 
 ## Instructions:
-### Setting Up NeoDance
+### Setting Up SIEVE
 
 SIEVE contains Python bindings for itself and various baselines.
 1. Install ACORN following instructions in their [repository](https://github.com/TAG-Research/ACORN)
