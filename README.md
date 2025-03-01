@@ -1,7 +1,7 @@
 # Repository for SIEVE: Effective Filtered Vector Search with Collection of Indexes
 
 ## Project structure:
-* `hnswtest`: clone of hnswlib, contains NeoDance's implementation
+* `hnswtest`: clone of hnswlib, contains SIEVE's implementation
 * `biganntest`: clone of Neurips'23 BigANN benchmark suite, contains experiment setups
 * `data_query_attr_generators`: our code for generating data attributes and query filters for the 4 datasets (Paper, UQV, Sift, MSONG).
 
