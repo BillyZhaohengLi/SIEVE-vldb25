@@ -1,4 +1,4 @@
-# Repository for NeoDance: Near-Optimal Index Collection for Filtered Vector Search
+# Repository for SIEVE: Effective Filtered Vector Search with Collection of Indexes
 
 ## Project structure:
 * `hnswtest`: clone of hnswlib, contains NeoDance's implementation
@@ -8,9 +8,9 @@
 ## Instructions:
 ### Setting Up NeoDance
 
-NeoDance contains Python bindings for itself and various baselines.
+SIEVE contains Python bindings for itself and various baselines.
 1. Install ACORN following instructions in their [repository](https://github.com/TAG-Research/ACORN)
-2. install NeoDance:
+2. install SIEVE:
 ```
 cd hnswtest
 pip install .
