@@ -72,8 +72,11 @@ paper:
               "is_and": "True",
               "M": 32,
               "ef_construction": 40,
+              "index_budget": 1000,
               "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
               "heterogeneous_indexing": "False",
+              "heterogeneous_search": "False",
               "num_index_construction_threads": 96
             }]
           query-args: |
@@ -151,6 +154,42 @@ sift:
             {"ef_search": 110}]
 
 
+siftrange:
+    oracle:
+      docker-tag: neurips23-filter-oracle
+      module: neurips23.filter.oracle.oracle
+      constructor: Oracle
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "sift_query_attrs_range.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "True",
+              "is_range": "True",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 50,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "heterogeneous_search": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
 msong:
     oracle:
       docker-tag: neurips23-filter-oracle
@@ -167,6 +206,38 @@ msong:
               "bitvector_cutoff": 1000,
               "heterogeneous_indexing": "False",
               "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+msongrange:
+    oracle:
+      docker-tag: neurips23-filter-oracle
+      module: neurips23.filter.oracle.oracle
+      constructor: Oracle
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "msong_query_attrs_range.pkl",
+              "is_and": "False",
+              "M": 32,
+              "ef_construction": 40,
+              "bitvector_cutoff": 1000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96,
+              "is_range": "True"
             }]
           query-args: |
             [{"ef_search": 10},

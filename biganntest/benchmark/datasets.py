@@ -7,6 +7,7 @@ import random
 import sys
 import struct
 import time
+import pickle
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -16,7 +17,7 @@ from urllib.request import urlretrieve
 from .dataset_io import (
     xbin_mmap, download_accelerated, download, sanitize,
     knn_result_read, range_result_read, read_sparse_matrix,
-    write_sparse_matrix,
+    write_sparse_matrix, read_fbin
 )
 
 
@@ -1532,6 +1533,73 @@ class Sift(DatasetCompetitionFormat):
             return "knn"
 
 
+class SiftRange(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1000000
+        self.d = 128
+        self.nq = 10000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "sift_base.fbin"
+        self.qs_fn = "sift_query.fbin"
+        self.qs_private_fn = "sift_query.fbin"
+        self.ds_metadata_fn = "sift_data_attrs.fbin"
+        self.qs_metadata_fn = "sift_query_attrs.pkl"
+        self.qs_private_metadata_fn = "sift_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "sift_gt.ibin"
+        self.gt_private_fn = "sift_gt.ibin"
+
+        self.private_gt_fn = "sift_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "sift2")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_fbin(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
 class SiftUpdate(DatasetCompetitionFormat):
     """ the 2023 competition """
 
@@ -1666,6 +1734,73 @@ class Msong(DatasetCompetitionFormat):
             return "knn"
 
 
+class MsongRange(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 992272
+        self.d = 420
+        self.nq = 200
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "msong_base.fbin"
+        self.qs_fn = "msong_query.fbin"
+        self.qs_private_fn = "msong_query.fbin"
+        self.ds_metadata_fn = "msong_data_attrs.fbin"
+        self.qs_metadata_fn = "msong_query_attrs.pkl"
+        self.qs_private_metadata_fn = "msong_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "msong_gt.ibin"
+        self.gt_private_fn = "msong_gt.ibin"
+
+        self.private_gt_fn = "msong_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "msong2")
+
+        self.private_nq = 200
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_fbin(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
 class MsongUpdate(DatasetCompetitionFormat):
     """ the 2023 competition """
 
@@ -1774,7 +1909,9 @@ DATASETS = {
     'uqv': lambda: Uqv(),
     'paper': lambda: Paper(),
     'sift': lambda: Sift(),
+    'siftrange': lambda: SiftRange(),
     'msong': lambda: Msong(),
+    'msongrange': lambda: MsongRange(),
 
     'siftupdate': lambda: SiftUpdate(),
     'uqvupdate': lambda: UqvUpdate(),

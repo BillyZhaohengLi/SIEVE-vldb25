@@ -669,13 +669,22 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         size += sizeof(mult_);
         size += sizeof(ef_construction_);
 
+        std::cout << "misc sizes: " << size << std::endl;
+
         size += cur_element_count * size_data_per_element_;
+
+        std::cout << "element sizes: " << cur_element_count * size_data_per_element_ << std::endl;
+
+        size_t link_sizes = 0;
 
         for (size_t i = 0; i < cur_element_count; i++) {
             unsigned int linkListSize = element_levels_[i] > 0 ? size_links_per_element_ * element_levels_[i] : 0;
             size += sizeof(linkListSize);
             size += linkListSize;
+            link_sizes += sizeof(linkListSize);
+            link_sizes += linkListSize;
         }
+        std::cout << "link sizes: " << link_sizes << std::endl;
         return size;
     }
 

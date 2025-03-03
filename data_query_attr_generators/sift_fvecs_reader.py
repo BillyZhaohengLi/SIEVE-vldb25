@@ -5,6 +5,8 @@ from scipy.sparse import csc_matrix, lil_matrix, csr_matrix
 import pickle
 import math
 from heapq import heapify, heappush, heappop 
+import os
+import bisect
 
 def write_sparse_matrix(mat, fname):
     """ write a CSR matrix in the spmat format """
@@ -93,55 +95,126 @@ def ivecs_read(fname):
 
 
 if __name__ == "__main__":
-    query_matrix = fvecs_read("~/bigann/biganntest/data/sift/sift_query.fvecs", np.int32)
-    dataset = fvecs_read("~/bigann/biganntest/data/sift/sift_base.fvecs", np.int32)
+    query_matrix = fvecs_read("~/bigann/biganntest/data/sift2/sift_query.fvecs", np.int32)
+    dataset = fvecs_read("~/bigann/biganntest/data/sift2/sift_base.fvecs", np.int32)
 
     print(query_matrix.shape)
     print(dataset.shape)
 
-    # 200 attrs, each with 4 possible values
-    random.seed(10)
-    n_filters = 200
-    data_filters_lil_matrix = lil_matrix((dataset.shape[0], n_filters), dtype=np.int32)
-    for j in range(n_filters):
-        if j % 10 == 0:
-            print(j)
-        target = math.pow(1 / (j + 3), 0.5)
-        for i in range(dataset.shape[0]):
-            if random.random() < target:
-                data_filters_lil_matrix[i, j] = 1
-    print("nonzero:", data_filters_lil_matrix.count_nonzero())
-    data_filters_csc_matrix = csc_matrix(data_filters_lil_matrix)
-    pickle.dump(data_filters_csc_matrix, open("~/bigann/biganntest/data/sift/sift_data_attrs.pkl", "wb"))
-    attr_matrix = pickle.load(open("~/bigann/biganntest/data/sift/sift_data_attrs.pkl", "rb"))
+    # 2 attrs, each drawn from normal distribution
+    np.random.seed(10)
+    n_filters = 2
+    data_filters_matrix = np.random.normal(loc=0, scale=1, size=(n_filters, dataset.shape[0]))
+    data_filters_matrix.sort()
+    data_filters_matrix = np.float32(data_filters_matrix)
+    pickle.dump(np.transpose(data_filters_matrix), open("~/bigann/biganntest/data/sift2/sift_data_attrs.pkl", "wb"))
 
+    # zipf distribution for queries
     random.seed(10)
-    # compute sum probabilities
-    template_probs = [math.pow(1/(j+3), 0.6) for j in range(200)]
-    scaled_template_probs = [round(i / sum(template_probs) * 10000) for i in template_probs]
-    scaled_template_probs[-1] = scaled_template_probs[-1] - 1
-    print(sum(scaled_template_probs))
+    np.random.seed(10)
+    sum = 10000
+    q_list = []
+    templates = {}
+    zipf_coef = 200
+    while len(q_list) < sum:
+        i = 0
+        # generate a query template
+        template = [np.random.normal(loc = 0, scale = 1) for i in range(4)]
+        template.sort()
+        if random.random() > 0.5:
+            tmp = template.pop(3)
+            template.insert(1, tmp)
+        else:
+            tmp = template.pop(2)
+            template.insert(1, tmp)
+        if random.random() > 0.5:
+            template = template[2:] + template[:2]
+        template = tuple(template)
+        # for j in range(4):
+        #     template.append(np.random.normal(loc = 0, scale = 1))
+        #     template.append(np.random.normal(loc = 0, scale = 1))
+        #     template.append(np.random.normal(loc = 0, scale = 1))
+        #     template.append(np.random.normal(loc = 0, scale = 1))
+        # if template[0] > template[1]:
+        #     template[0], template[1] = template[1], template[0]
+        # if template[2] > template[3]:
+        #     template[2], template[3] = template[3], template[2]
+        # template = tuple(template)
+        
+        if template in templates:
+            continue
+
+        # template = random.sample(filter_list,20,weights=[1/(j+3) for j in range(200000)])
+        while i < sum / zipf_coef / 5:
+            i += 1
+            q_list.append(template)
+            if len(q_list) >= sum:
+                break
+        zipf_coef -= 1
+
+        templates[template] = i
+    print(zipf_coef)
+    print(len(templates))
+
+    sels = []
+    sel = 0
+    for k, v in templates.items():
+        first_small = bisect.bisect_left(data_filters_matrix[0], k[0])
+        first_large = bisect.bisect_right(data_filters_matrix[0], k[1])
+        second_small = bisect.bisect_left(data_filters_matrix[1], k[2])
+        second_large = bisect.bisect_right(data_filters_matrix[1], k[3])
+        # print(first_small, first_large, second_small, second_large)
+        # if max(first_small, second_small) <= min(first_large, second_large):
+        #     val = (max(first_large, second_large) - min(first_small, second_small))
+        # else:
+        #     # If intervals are disjoint
+        #     val = ((first_large - first_small) + (second_large - second_small))
+        val = min(first_large, second_large) - max(first_small, second_small)
+        sel += v * val
+        for i in range(v):
+            sels.append(val)
+    print("selectivity:", sel / 10000)
+
+    sels.sort()
+    print(sels[0])
+    print(sels[2000])
+    print(sels[4000])
+    print(sels[6000])
+    print(sels[8000])
+    print(sels[9999])
+
+    tmp_matrix = []
+    for k, v in templates.items():
+        for i in range(v):
+            tmp_matrix.append(list(k))
 
     # shuffle templates
-    attr_map = [i for i in range(200)]
-    random.shuffle(attr_map)
+    random.shuffle(tmp_matrix)
+    random.shuffle(tmp_matrix)
+    tmp_matrix = np.array(tmp_matrix, dtype = np.float32)
+    print(tmp_matrix.shape)
+    pickle.dump(tmp_matrix, open("~/bigann/biganntest/data/sift2/sift_query_attrs.pkl", "wb"))
 
-    templates = []
-    for i in range(200):
-        for j in range(scaled_template_probs[i]):
-            templates.append(attr_map[i])
-    random.shuffle(templates)
+    # # shuffle templates
+    # attr_map = [i for i in range(200)]
+    # random.shuffle(attr_map)
 
-    print(attr_matrix.shape)
-    sel = 0
-    for i in range(len(templates)):
-        sel += 1000000 * math.pow(1/(templates[i] + 3),0.5)
-    print("selectivity:", sel)
+    # templates = []
+    # for i in range(200):
+    #     for j in range(scaled_template_probs[i]):
+    #         templates.append(attr_map[i])
+    # random.shuffle(templates)
 
-    # to spmat
-    query_filters_lil_matrix = lil_matrix((10000, 200), dtype=np.int32)
-    for i in range(len(templates)):
-        query_filters_lil_matrix[i,templates[i]] = 1
+    # print(attr_matrix.shape)
+    # sel = 0
+    # for i in range(len(templates)):
+    #     sel += 1000000 * math.pow(1/(templates[i] + 3),0.5)
+    # print("selectivity:", sel)
+
+    # # to spmat
+    # query_filters_lil_matrix = lil_matrix((10000, 200), dtype=np.int32)
+    # for i in range(len(templates)):
+    #     query_filters_lil_matrix[i,templates[i]] = 1
     
-    # print("query attrs shape:", query_attrs.shape)
-    pickle.dump(csr_matrix(query_filters_lil_matrix), open("~/bigann/biganntest/data/sift/sift_query_attrs.pkl", "wb"))
+    # # print("query attrs shape:", query_attrs.shape)
+    # pickle.dump(csr_matrix(query_filters_lil_matrix), open("~/bigann/biganntest/data/sift/sift_query_attrs.pkl", "wb"))

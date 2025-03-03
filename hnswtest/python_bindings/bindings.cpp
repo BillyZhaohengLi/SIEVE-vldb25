@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <chrono>
 #include <immintrin.h>
-#include <omp.h>
+// #include <omp.h>
 
 #include "roaring.hh"
 #include "roaring.c"
@@ -36,6 +36,7 @@
 #include "nhq_include/index_graph.h"
 #include "nhq_include/index_graph.cpp"
 #include "nhq_include/util.h"
+
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // needed to bring in _a literal
@@ -114,12 +115,23 @@ class HierarchicalIndexUint8 {
         size_t bitvector_cutoff,
         size_t historical_workload_window_size,
         bool enable_heterogeneous_indexing,
+        bool enable_heterogeneous_search,
         size_t num_threads
     ) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup index params
         hnswlib::PartitionedIndexParams index_params{
-            dataset_size, dim, M, ef_construction, index_vector_budget, bitvector_cutoff, historical_workload_window_size, enable_heterogeneous_indexing, num_threads};
+            dataset_size,
+            dim,
+            M, ef_construction,
+            index_vector_budget,
+            bitvector_cutoff,
+            historical_workload_window_size,
+            enable_heterogeneous_indexing,
+            enable_heterogeneous_search,
+            0.5, // Query correlation constant hardcoded
+            num_threads
+        };
         // setup filters
         dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
         dataset_filters->transpose_inplace();
@@ -154,7 +166,7 @@ class HierarchicalIndexUint8 {
         alg->fitIndex();
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<uint8_t, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -170,9 +182,14 @@ class HierarchicalIndexUint8 {
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
+        auto start = std::chrono::high_resolution_clock::now();
         auto results = alg->searchKnn(queries.data(i), knn, predicate_arr[i]);
+        auto end = std::chrono::high_resolution_clock::now();
         for (size_t j = 0; j < knn; j++) {
             if (!results.empty()) {
                 ids.mutable_data(i)[j] = results.top().second;
@@ -182,12 +199,14 @@ class HierarchicalIndexUint8 {
                 ids.mutable_data(i)[j] = 0;
             }
         }
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
     }); 
     end = std::chrono::high_resolution_clock::now();
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     alg->printTally();
 
-    return ids;
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -205,6 +224,8 @@ class HierarchicalIndexFloat {
     float* _new_data;
     hnswlib::DatasetFilters* new_dataset_filters;
 
+    bool _is_range;
+
     HierarchicalIndexFloat(
         std::string filename,
         std::string filter_filename,
@@ -217,14 +238,31 @@ class HierarchicalIndexFloat {
         size_t bitvector_cutoff,
         size_t historical_workload_window_size,
         bool enable_heterogeneous_indexing,
-        size_t num_threads
-    ) : _dataset_size(dataset_size) {
+        bool enable_heterogeneous_search,
+        size_t num_threads,
+        bool is_range
+    ) : _dataset_size(dataset_size), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup index params
+        // Query correlation constant is hardcoded as 0.5.
         hnswlib::PartitionedIndexParams index_params{
-            dataset_size, dim, M, ef_construction, index_vector_budget, bitvector_cutoff, historical_workload_window_size, enable_heterogeneous_indexing, num_threads};
+            dataset_size,
+            dim,
+            M, ef_construction,
+            index_vector_budget,
+            bitvector_cutoff,
+            historical_workload_window_size,
+            enable_heterogeneous_indexing,
+            enable_heterogeneous_search,
+            0.5, // Query correlation constant hardcoded
+            num_threads
+        };
         // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        if (!_is_range) {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        } else {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
+        }
         dataset_filters->transpose_inplace();
         dataset_filters->make_bvs();
 
@@ -288,7 +326,7 @@ class HierarchicalIndexFloat {
         std::cout << "Time to update index: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<float, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -304,11 +342,14 @@ class HierarchicalIndexFloat {
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
-        // auto start2 = std::chrono::high_resolution_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
         auto results = alg->searchKnn(queries.data(i), knn, predicate_arr[i]);
-        // auto end2 = std::chrono::high_resolution_clock::now();
+        auto end = std::chrono::high_resolution_clock::now();
         for (size_t j = 0; j < knn; j++) {
             if (!results.empty()) {
                 ids.mutable_data(i)[j] = results.top().second;
@@ -321,13 +362,15 @@ class HierarchicalIndexFloat {
         // if (predicate_arr[i].cardinality() == _dataset_size) {
         // maxsel_search_time += std::chrono::duration<double>(end2 - start2).count();
         // }
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
     }); 
     end = std::chrono::high_resolution_clock::now();
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     std::cout << "max selectivity query time: " << maxsel_search_time << std::endl << std::flush;
     alg->printTally();
 
-    return ids;
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -375,7 +418,7 @@ class PreFilterUint8 {
         std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<uint8_t, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, uint64_t num_threads) {
@@ -390,9 +433,13 @@ class PreFilterUint8 {
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+    
     size_t bruteforce_distance_comps = 0;
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
+        auto start = std::chrono::high_resolution_clock::now();
         roaring::Roaring& deref = *predicate_arr[i]._bitvector;
         std::priority_queue<std::pair<int, size_t>> max_priority_queue;
         for (roaring::Roaring::const_iterator j = deref.begin(); j != deref.end(); j++) {
@@ -414,12 +461,16 @@ class PreFilterUint8 {
                 ids.mutable_data(i)[j] = 0;
             }
         }
+        auto end = std::chrono::high_resolution_clock::now();
+
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
     }); 
     end = std::chrono::high_resolution_clock::now();
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     std::cout << "Num distance comps: " << bruteforce_distance_comps << std::endl << std::flush;
 
-    return ids;
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -432,17 +483,23 @@ class PreFilterFloat {
     hnswlib::HierarchicalNSW<float>* _hnsw;
     size_t _dataset_size;
     size_t _dim;
+    bool _is_range;
 
     PreFilterFloat(
         std::string filename,
         std::string filter_filename,
         size_t dataset_size,
         size_t dim,
-        size_t num_threads
-    ) : _dataset_size(dataset_size), _dim(dim) {
+        size_t num_threads,
+        bool is_range
+    ) : _dataset_size(dataset_size), _dim(dim), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        if (is_range) {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, is_range);
+        } else {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        }
         dataset_filters->transpose_inplace();
         dataset_filters->make_bvs();
 
@@ -466,7 +523,7 @@ class PreFilterFloat {
         std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<float, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, uint64_t num_threads) {
@@ -481,9 +538,13 @@ class PreFilterFloat {
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+
     size_t bruteforce_distance_comps = 0;
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
+        auto start = std::chrono::high_resolution_clock::now();
         roaring::Roaring& deref = *predicate_arr[i]._bitvector;
         std::priority_queue<std::pair<float, size_t>> max_priority_queue;
         for (roaring::Roaring::const_iterator j = deref.begin(); j != deref.end(); j++) {
@@ -506,15 +567,18 @@ class PreFilterFloat {
                 ids.mutable_data(i)[j] = 0;
             }
         }
+        auto end = std::chrono::high_resolution_clock::now();
+
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
     }); 
     end = std::chrono::high_resolution_clock::now();
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     std::cout << "Num distance comps: " << bruteforce_distance_comps << std::endl << std::flush;
 
-    return ids;
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
-
 
 class HNSWBaseUint8 {
  public:
@@ -565,7 +629,7 @@ class HNSWBaseUint8 {
         std::cout << "Time to build index: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<uint8_t, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -581,10 +645,16 @@ class HNSWBaseUint8 {
     }
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
+
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
         hnswlib::BitMapFilter QueryBitset(predicate_arr[i]._bitvector);
+        auto start = std::chrono::high_resolution_clock::now();
         auto results = _hnsw->searchKnn(queries.data(i), knn, &QueryBitset);
+        auto end = std::chrono::high_resolution_clock::now();
         for (size_t j = 0; j < knn; j++) {
             if (!results.empty()) {
                 ids.mutable_data(i)[j] = results.top().second;
@@ -594,13 +664,16 @@ class HNSWBaseUint8 {
                 ids.mutable_data(i)[j] = 0;
             }
         }
+
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
     }); 
     end = std::chrono::high_resolution_clock::now();
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     std::cout << "Num distance comps: " << _hnsw->metric_distance_computations << std::endl << std::flush;
     _hnsw->metric_distance_computations = 0;
 
-    return std::move(ids);
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -613,6 +686,8 @@ class HNSWBaseFloat {
     hnswlib::HierarchicalNSW<float>* _hnsw;
     hnswlib::DatasetFilters* dataset_filters;
 
+    bool _is_range;
+
     HNSWBaseFloat(
         std::string filename,
         std::string filter_filename,
@@ -620,11 +695,16 @@ class HNSWBaseFloat {
         size_t dim,
         size_t M,
         size_t ef_construction,
-        size_t num_threads
-    ) {
+        size_t num_threads,
+        bool is_range
+    ) : _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        if (!_is_range) {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        } else {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
+        }
         dataset_filters->transpose_inplace();
         dataset_filters->make_bvs();
 
@@ -653,7 +733,7 @@ class HNSWBaseFloat {
         std::cout << "Time to build index: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<float, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -669,6 +749,10 @@ class HNSWBaseFloat {
     }
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
+
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
+    
     start = std::chrono::high_resolution_clock::now();
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
         // std::cout << "query " << i << std::endl;
@@ -678,7 +762,9 @@ class HNSWBaseFloat {
         // std::cout << std::endl;
 
         hnswlib::BitMapFilter QueryBitset(predicate_arr[i]._bitvector);
+        auto start = std::chrono::high_resolution_clock::now();
         auto results = _hnsw->searchKnn(queries.data(i), knn, &QueryBitset);
+        auto end = std::chrono::high_resolution_clock::now();
         // std::cout << " topk: ";
         for (size_t j = 0; j < knn; j++) {
             if (!results.empty()) {
@@ -689,6 +775,10 @@ class HNSWBaseFloat {
                 ids.mutable_data(i)[j] = 0;
             }
         }
+
+        times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+        cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
+
         // std::cout << " done" << std::endl;
     }); 
     end = std::chrono::high_resolution_clock::now();
@@ -696,7 +786,7 @@ class HNSWBaseFloat {
     std::cout << "Num distance comps: " << _hnsw->metric_distance_computations << std::endl << std::flush;
     _hnsw->metric_distance_computations = 0;
 
-    return std::move(ids);
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -731,6 +821,8 @@ class OraclePartitionUint8 {
             bitvector_cutoff,
             std::numeric_limits<int>::max(), // Use all historical queries for optimization
             enable_heterogeneous_indexing,
+            false,
+            0.5,
             num_threads};
 
         // setup filters
@@ -801,6 +893,8 @@ class OraclePartitionFloat {
     hnswlib::PartitionedHNSW<float, float>* alg;
     hnswlib::DatasetFilters* dataset_filters;
 
+    bool _is_range;
+
     OraclePartitionFloat(
         std::string filename,
         std::string filter_filename,
@@ -811,8 +905,9 @@ class OraclePartitionFloat {
         size_t ef_construction,
         size_t bitvector_cutoff,
         bool enable_heterogeneous_indexing,
-        size_t num_threads
-    ) {
+        size_t num_threads,
+        bool is_range
+    ) : _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup index params
         hnswlib::PartitionedIndexParams index_params{
@@ -824,10 +919,16 @@ class OraclePartitionFloat {
             bitvector_cutoff,
             std::numeric_limits<int>::max(), // Use all historical queries for optimization
             enable_heterogeneous_indexing,
+            false,
+            0.5, // Query correlation constant hardcoded
             num_threads};
 
         // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        if (!_is_range) {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        } else {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
+        }
         dataset_filters->transpose_inplace();
         dataset_filters->make_bvs();
 
@@ -916,6 +1017,8 @@ class TagTreePartitionUint8 {
             bitvector_cutoff,
             std::numeric_limits<int>::max(), // Use all historical queries for optimization
             enable_heterogeneous_indexing,
+            false,
+            0.5,  // Query correlation constant hardcoded
             num_threads};
 
         // setup filters
@@ -1016,6 +1119,8 @@ class TagTreePartitionFloat {
             bitvector_cutoff,
             std::numeric_limits<int>::max(), // Use all historical queries for optimization
             enable_heterogeneous_indexing,
+            false,
+            0.5, // Query correlation constant hardcoded
             num_threads};
 
         // setup filters
@@ -1162,7 +1267,7 @@ class AcornIndexUint8 {
         std::cout << "Time to build index: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-        py::array_t<unsigned int> batch_filter_search(
+        py::object batch_filter_search(
      py::array_t<uint8_t, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -1180,6 +1285,9 @@ class AcornIndexUint8 {
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     start = std::chrono::high_resolution_clock::now();
+
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
 
     float bruteforce_search_time = 0;
     size_t bruteforce_distance_comps = 0;
@@ -1213,6 +1321,9 @@ class AcornIndexUint8 {
             bruteforce_search_time += std::chrono::duration<double>(end - start).count();
             bruteforce_searches++;
             bruteforce_distance_comps += predicate_arr[i].cardinality();
+
+            times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+            cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
         } else {
             std::vector<faiss::idx_t> nns2(knn);
             std::vector<float> dis2(knn);
@@ -1235,6 +1346,10 @@ class AcornIndexUint8 {
             }
             auto end2 = std::chrono::high_resolution_clock::now();
             acorn_search_time += std::chrono::duration<double>(end2 - start2).count();
+
+
+            times.mutable_at(i) = std::chrono::duration<double>(end2 - start2).count();
+            cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
         }
     }); 
     end = std::chrono::high_resolution_clock::now();
@@ -1245,8 +1360,9 @@ class AcornIndexUint8 {
     std::cout << "Bruteforce distance comps: " << bruteforce_distance_comps << std::endl;
     std::cout << "Bruteforce searches: " << bruteforce_searches << std::endl;
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
+    std::cout << "ACORN QPS:" << filters.size() / (acorn_search_time + bruteforce_search_time) << std::endl << std::flush;
 
-    return std::move(ids);
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -1264,6 +1380,8 @@ class AcornIndexFloat {
     hnswlib::HierarchicalNSW<float>* _hnsw;
     bool init_bvs = false;
 
+    bool _is_range;
+
     AcornIndexFloat(
         std::string filename,
         std::string filter_filename,
@@ -1273,12 +1391,17 @@ class AcornIndexFloat {
         size_t gamma,
         size_t m_beta,
         float bruteforce_selectivity_threshold,
-        size_t num_threads
-    ) : _dataset_size(dataset_size), _dim(dim), _bruteforce_selectivity_threshold(bruteforce_selectivity_threshold) {
+        size_t num_threads,
+        bool is_range
+    ) : _dataset_size(dataset_size), _dim(dim), _bruteforce_selectivity_threshold(bruteforce_selectivity_threshold), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
         // setup filters
         std::cout << "Start read filters" << std::endl << std::flush;
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        if (!_is_range) {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
+        } else {
+            dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
+        }
         dataset_filters->transpose_inplace();
         dataset_filters->make_bvs();
         std::cout << "Read filters" << std::endl << std::flush;
@@ -1320,7 +1443,7 @@ class AcornIndexFloat {
         std::cout << "Time to build index: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     }
 
-    py::array_t<unsigned int> batch_filter_search(
+    py::object batch_filter_search(
      py::array_t<float, py::array::c_style | py::array::forcecast>& queries,
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
@@ -1342,6 +1465,9 @@ class AcornIndexFloat {
     float bruteforce_search_time = 0;
     size_t bruteforce_distance_comps = 0;
     size_t bruteforce_searches = 0;
+
+    py::array_t<float> times(num_queries);
+    py::array_t<size_t> cardinalities(num_queries);
     
     hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
         std::vector<faiss::idx_t> nns2(knn);
@@ -1370,6 +1496,9 @@ class AcornIndexFloat {
             }
             auto end = std::chrono::high_resolution_clock::now();
             bruteforce_search_time += std::chrono::duration<double>(end - start).count();
+
+            times.mutable_at(i) = std::chrono::duration<double>(end - start).count();
+            cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
         } else {
             std::vector<uint32_t> tmp_vec = predicate_arr[i].matching_points();
             for (size_t j = 0; j < tmp_vec.size(); j++) {
@@ -1385,6 +1514,8 @@ class AcornIndexFloat {
             // if (predicate_arr[i].cardinality() == _dataset_size) {
             //     maxsel_search_time += std::chrono::duration<double>(end2 - start2).count();
             // }
+            times.mutable_at(i) = std::chrono::duration<double>(end2 - start2).count();
+            cardinalities.mutable_at(i) = predicate_arr[i].cardinality();
         }
     }); 
     end = std::chrono::high_resolution_clock::now();
@@ -1396,8 +1527,9 @@ class AcornIndexFloat {
     std::cout << "Bruteforce searches: " << bruteforce_searches << std::endl;
     std::cout << "Time serve queries: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
     std::cout << "max selectivity query time: " << maxsel_search_time << std::endl << std::flush;
+    std::cout << "ACORN QPS:" << filters.size() / (acorn_search_time + bruteforce_search_time) << std::endl << std::flush;
 
-    return std::move(ids);
+    return py::make_tuple(ids, times, cardinalities);
   }
 };
 
@@ -1672,17 +1804,18 @@ class NHQ {
 PYBIND11_MODULE(hnswlib, m) {
         // should have initializers taking either one or two int32_t arguments
         py::class_<hnswlib::QueryFilter>(m, "QueryFilter")
-        .def(py::init<std::unordered_set<int32_t>, bool>(), py::arg("filters"), py::arg("is_and"));
+        .def(py::init<std::unordered_set<int32_t>, bool>(), py::arg("filters"), py::arg("is_and"))
+        .def(py::init<std::vector<float>, bool>(), py::arg("filters"), py::arg("is_and"));
 
         py::class_<HierarchicalIndexUint8>(m, "HierarchicalIndexUint8")
-        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, bool, size_t>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("enable_heterogeneous_search"), py::arg("num_threads"))
         .def("update_index", &HierarchicalIndexUint8::update_index)
         .def("batch_filter_search", &HierarchicalIndexUint8::batch_filter_search);
 
         py::class_<HierarchicalIndexFloat>(m, "HierarchicalIndexFloat")
-        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, bool, size_t, bool>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("enable_heterogeneous_search"), py::arg("num_threads"), py::arg("is_range"))
         .def("update_index", &HierarchicalIndexFloat::update_index)
         .def("update_data", &HierarchicalIndexFloat::update_data)
         .def("batch_filter_search", &HierarchicalIndexFloat::batch_filter_search);
@@ -1693,8 +1826,8 @@ PYBIND11_MODULE(hnswlib, m) {
         .def("batch_filter_search", &PreFilterUint8::batch_filter_search);
 
         py::class_<PreFilterFloat>(m, "PreFilterFloat")
-        .def(py::init<std::string, std::string, size_t, size_t, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, size_t, size_t, size_t, bool>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("num_threads"), py::arg("is_range"))
         .def("batch_filter_search", &PreFilterFloat::batch_filter_search);
 
         py::class_<HNSWBaseUint8>(m, "HNSWBaseUint8")
@@ -1703,8 +1836,8 @@ PYBIND11_MODULE(hnswlib, m) {
         .def("batch_filter_search", &HNSWBaseUint8::batch_filter_search);
 
         py::class_<HNSWBaseFloat>(m, "HNSWBaseFloat")
-        .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, bool>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("num_threads"), py::arg("is_range"))
         .def("batch_filter_search", &HNSWBaseFloat::batch_filter_search);
 
         py::class_<OraclePartitionUint8>(m, "OraclePartitionUint8")
@@ -1714,8 +1847,8 @@ PYBIND11_MODULE(hnswlib, m) {
         .def("batch_filter_search", &OraclePartitionUint8::batch_filter_search);
 
         py::class_<OraclePartitionFloat>(m, "OraclePartitionFloat")
-        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, bool, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("bitvector_cutoff"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, bool, size_t, bool>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("bitvector_cutoff"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"), py::arg("is_range"))
         .def("update_index", &OraclePartitionFloat::update_index)
         .def("batch_filter_search", &OraclePartitionFloat::batch_filter_search);
 
@@ -1747,7 +1880,7 @@ PYBIND11_MODULE(hnswlib, m) {
         .def("batch_filter_search", &AcornIndexUint8::batch_filter_search);
 
         py::class_<AcornIndexFloat>(m, "AcornIndexFloat")
-        .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, float, size_t>(),
-            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("gamma"), py::arg("m_beta"), py::arg("bruteforce_selectivity_threshold"), py::arg("num_threads"))
+        .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, float, size_t, bool>(),
+            py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("gamma"), py::arg("m_beta"), py::arg("bruteforce_selectivity_threshold"), py::arg("num_threads"), py::arg("is_range"))
         .def("batch_filter_search", &AcornIndexFloat::batch_filter_search);
 }

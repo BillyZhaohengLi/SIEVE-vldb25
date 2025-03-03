@@ -91,6 +91,24 @@ sift:
             [{"ef_search": 10}]
 
 
+siftrange:
+    prefilter:
+      docker-tag: neurips23-filter-prefilter
+      module: neurips23.filter.prefilter.prefilter
+      constructor: Prefilter
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "True",
+              "is_range": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10}]
+
+
+
 msong:
     prefilter:
       docker-tag: neurips23-filter-prefilter
@@ -105,3 +123,21 @@ msong:
             }]
           query-args: |
             [{"ef_search": 20}]
+
+
+msongrange:
+    prefilter:
+      docker-tag: neurips23-filter-prefilter
+      module: neurips23.filter.prefilter.prefilter
+      constructor: Prefilter
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "is_range": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10}]
+

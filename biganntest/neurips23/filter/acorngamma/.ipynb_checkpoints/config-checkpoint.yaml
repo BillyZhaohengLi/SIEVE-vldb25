@@ -47,15 +47,7 @@ yfcc-10M:
             }]
           query-args: |
             [{"ef_search": 10},
-            {"ef_search": 20},
-            {"ef_search": 30},
-            {"ef_search": 40},
-            {"ef_search": 50},
             {"ef_search": 60},
-            {"ef_search": 70},
-            {"ef_search": 80},
-            {"ef_search": 90},
-            {"ef_search": 100},
             {"ef_search": 110},
             {"ef_search": 160},
             {"ef_search": 210},
@@ -180,6 +172,45 @@ sift:
             {"ef_search": 510}]
 
 
+siftrange:
+    acorngamma:
+      docker-tag: neurips23-filter-acorngamma
+      module: neurips23.filter.acorngamma.acorngamma
+      constructor: AcornGamma
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "True",
+              "M": 32,
+              "gamma": 13,
+              "m_beta": 64,
+              "bruteforce_selectivity_threshold": 0.005,
+              "num_index_construction_threads": 96,
+              "is_range": "True"
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+
 msong:
     acorngamma:
       docker-tag: neurips23-filter-acorngamma
@@ -195,6 +226,45 @@ msong:
               "m_beta": 64,
               "bruteforce_selectivity_threshold": 0.005,
               "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110},
+            {"ef_search": 160},
+            {"ef_search": 210},
+            {"ef_search": 260},
+            {"ef_search": 310},
+            {"ef_search": 360},
+            {"ef_search": 410},
+            {"ef_search": 460},
+            {"ef_search": 510}]
+
+
+msongrange:
+    acorngamma:
+      docker-tag: neurips23-filter-acorngamma
+      module: neurips23.filter.acorngamma.acorngamma
+      constructor: AcornGamma
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "M": 32,
+              "gamma": 20,
+              "m_beta": 64,
+              "bruteforce_selectivity_threshold": 0.005,
+              "num_index_construction_threads": 96,
+              "is_range": "True"
             }]
           query-args: |
             [{"ef_search": 10},

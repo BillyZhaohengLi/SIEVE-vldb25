@@ -1,8 +1,8 @@
 random-filter-s:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -30,10 +30,10 @@ random-filter-s:
               }]
 
 yfcc-10M:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -46,7 +46,8 @@ yfcc-10M:
               "index_budget": 2,
               "bitvector_cutoff": 1000,
               "workload_window_size": 1000000,
-              "heterogeneous_indexing": "False",
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
               "num_index_construction_threads": 96
             }]
           query-args: |
@@ -63,10 +64,10 @@ yfcc-10M:
             {"ef_search": 110}]
 
 paper:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -79,7 +80,8 @@ paper:
               "index_budget": 2,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
-              "heterogeneous_indexing": "False",
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
               "num_index_construction_threads": 96
             }]
           query-args: |
@@ -97,10 +99,10 @@ paper:
 
 
 uqv:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -108,12 +110,13 @@ uqv:
             [{"historical_filters_file": "uqv_query_attrs.pkl",
               "historical_filters_percentage": 0.25,
               "is_and": "False",
-              "M": 32,
+              "M": 64,
               "ef_construction": 40,
               "index_budget": 2,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
-              "heterogeneous_indexing": "False",
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
               "num_index_construction_threads": 96
             }]
           query-args: |
@@ -131,10 +134,10 @@ uqv:
 
 
 sift:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -142,12 +145,49 @@ sift:
             [{"historical_filters_file": "sift_query_attrs.pkl",
               "historical_filters_percentage": 0.25,
               "is_and": "False",
-              "M": 32,
+              "M": 16,
               "ef_construction": 40,
               "index_budget": 2,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
-              "heterogeneous_indexing": "False",
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+siftrange:
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "sift_query_attrs_range.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "True",
+              "is_range": "True",
+              "M": 64,
+              "ef_construction": 40,
+              "index_budget": 2.0,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
               "num_index_construction_threads": 96
             }]
           query-args: |
@@ -165,10 +205,10 @@ sift:
 
 
 msong:
-    neodance:
-      docker-tag: neurips23-filter-neodance
-      module: neurips23.filter.neodance.neodance
-      constructor: NeoDance
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
       base-args: ["@metric"]
       run-groups:
         base:
@@ -181,7 +221,43 @@ msong:
               "index_budget": 2,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
-              "heterogeneous_indexing": "False",
+              "heterogeneous_indexing": "True",
+              "heterogeneous_search": "True",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+msongrange:
+    sieve:
+      docker-tag: neurips23-filter-sieve
+      module: neurips23.filter.sieve.sieve
+      constructor: Sieve
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "msong_query_attrs_range.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "False",
+              "is_range": "True",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 2,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "True",
               "num_index_construction_threads": 96
             }]
           query-args: |

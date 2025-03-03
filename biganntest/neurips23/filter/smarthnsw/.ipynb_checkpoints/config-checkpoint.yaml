@@ -1,8 +1,8 @@
 random-filter-s:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
@@ -30,10 +30,10 @@ random-filter-s:
               }]
 
 yfcc-10M:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
@@ -43,7 +43,7 @@ yfcc-10M:
               "is_and": "True",
               "M": 16,
               "ef_construction": 40,
-              "index_budget": 0.5,
+              "index_budget": 0,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
               "heterogeneous_indexing": "False",
@@ -63,20 +63,20 @@ yfcc-10M:
             {"ef_search": 110}]
 
 paper:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
           args: |
             [{"historical_filters_file": "paper-filters.pkl", 
-              "historical_filters_percentage": 1,
+              "historical_filters_percentage": 0.25,
               "is_and": "True",
               "M": 32,
               "ef_construction": 40,
-              "index_budget": 0.5,
+              "index_budget": 0,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
               "heterogeneous_indexing": "False",
@@ -97,10 +97,10 @@ paper:
 
 
 uqv:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
@@ -110,7 +110,7 @@ uqv:
               "is_and": "False",
               "M": 32,
               "ef_construction": 40,
-              "index_budget": 0.5,
+              "index_budget": 0,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
               "heterogeneous_indexing": "False",
@@ -130,20 +130,55 @@ uqv:
             {"ef_search": 110}]
 
 sift:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
           args: |
             [{"historical_filters_file": "sift_query_attrs.pkl",
-              "historical_filters_percentage": 1,
+              "historical_filters_percentage": 0.25,
               "is_and": "False",
               "M": 32,
               "ef_construction": 40,
-              "index_budget": 0.5,
+              "index_budget": 0,
+              "bitvector_cutoff": 1000,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+siftrange:
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "sift_query_attrs_range.pkl",
+              "historical_filters_percentage": 0.25,
+              "is_and": "True",
+              "is_range": "True",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 0,
               "bitvector_cutoff": 1000,
               "workload_window_size": 100000,
               "heterogeneous_indexing": "False",
@@ -164,10 +199,10 @@ sift:
 
 
 msong:
-    mymethod0times100percent:
-      docker-tag: neurips23-filter-mymethod0times100percent
-      module: neurips23.filter.mymethod0times100percent.mymethod0times100percent
-      constructor: MyMethod0Times100Percent
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
       base-args: ["@metric"]
       run-groups:
         base:
@@ -175,6 +210,41 @@ msong:
             [{"historical_filters_file": "msong_query_attrs.pkl",
               "historical_filters_percentage": 1,
               "is_and": "False",
+              "M": 32,
+              "ef_construction": 40,
+              "index_budget": 0,
+              "bitvector_cutoff": 200,
+              "workload_window_size": 100000,
+              "heterogeneous_indexing": "False",
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+msongrange:
+    smarthnsw:
+      docker-tag: neurips23-filter-smarthnsw
+      module: neurips23.filter.smarthnsw.smarthnsw
+      constructor: SmartHnsw
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"historical_filters_file": "msong_query_attrs_range.pkl",
+              "historical_filters_percentage": 1,
+              "is_and": "False",
+              "is_range": "True",
               "M": 32,
               "ef_construction": 40,
               "index_budget": 0.5,

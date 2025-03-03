@@ -17,10 +17,29 @@ from datasketch import MinHash, MinHashLSH, LeanMinHash
 from sklearn.cluster import DBSCAN, KMeans
 from unionfind import UnionFind
 
+import math
+from scipy.sparse import csc_matrix, lil_matrix, csr_matrix
+
 from neurips23.filter.base import BaseFilterANN
 from benchmark.datasets import DATASETS
 from benchmark.dataset_io import download_accelerated
 
+def read_ibin(filename, start_idx=0, chunk_size=None):
+    """ Read *.ibin file that contains int32 vectors
+    Args:
+        :param filename (str): path to *.ibin file
+        :param start_idx (int): start reading vectors from this index
+        :param chunk_size (int): number of vectors to read.
+                                 If None, read all vectors
+    Returns:
+        Array of int32 vectors (numpy.ndarray)
+    """
+    with open(filename, "rb") as f:
+        nvecs, dim = np.fromfile(f, count=2, dtype=np.int32)
+        nvecs = (nvecs - start_idx) if chunk_size is None else chunk_size
+        arr = np.fromfile(f, count=nvecs * dim, dtype=np.int32,
+                          offset=start_idx * 4 * dim)
+    return arr.reshape(nvecs, dim)
 class SmartHnsw(BaseFilterANN):
 
     def __init__(self, metric, index_params):
@@ -35,6 +54,10 @@ class SmartHnsw(BaseFilterANN):
         self.heterogeneous_indexing = ast.literal_eval(index_params['heterogeneous_indexing'])
         self.num_index_construction_threads = int(index_params['num_index_construction_threads'])
         self.ef_search = 10
+        self.is_range = False
+        if 'is_range' in index_params:
+            self.is_range = True
+        print("is range:", self.is_range)
 
     def translate_dist_fn(self, metric):
         if metric == 'euclidean':
@@ -70,19 +93,23 @@ class SmartHnsw(BaseFilterANN):
         self.dtype = self.translate_dtype(ds.dtype)
         historical_filters = pickle.load(open(self.historical_filters_file, "rb"))
         
+        if not self.is_range:
+            rows, cols = historical_filters.nonzero()
+            filter_dict = defaultdict(list)
+    
+            for row, col in zip(rows, cols):
+                if row < self.historical_filters_percentage * historical_filters.shape[0]: 
+                    filter_dict[row].append(col)
+    
+            historical_filters_list = []
+            for i in filter_dict.keys():
+                historical_filters_list.append(hnswlib.QueryFilter(
+                    set(filter_dict[i]), self.is_and))
 
-        # there's almost certainly a way to do this in less than 0.1s, which costs us ~200 QPS
-        rows, cols = historical_filters.nonzero()
-        filter_dict = defaultdict(list)
-
-        for row, col in zip(rows, cols):
-            if row < self.historical_filters_percentage *historical_filters.shape[0]: 
-                filter_dict[row].append(col)
-
-        historical_filters_list = []
-        for i in filter_dict.keys():
-            historical_filters_list.append(hnswlib.QueryFilter(
-                set(filter_dict[i]), self.is_and))
+        else:
+            historical_filters_list = []
+            for i in range(int(historical_filters.shape[0] * self.historical_filters_percentage)):
+                historical_filters_list.append(hnswlib.QueryFilter(historical_filters[i], self.is_and))
 
         if hasattr(self, 'index'):
             print("Index already exists, skipping fit")
@@ -101,7 +128,8 @@ class SmartHnsw(BaseFilterANN):
                 self.bitvector_cutoff,
                 self.workload_window_size,
                 self.heterogeneous_indexing,
-                self.num_index_construction_threads
+                True,
+                self.num_index_construction_threads,
             )
 
         if self.dtype == "float":
@@ -117,7 +145,9 @@ class SmartHnsw(BaseFilterANN):
                 self.bitvector_cutoff,
                 self.workload_window_size,
                 self.heterogeneous_indexing,
-                self.num_index_construction_threads
+                True,
+                self.num_index_construction_threads,
+                self.is_range
             )
 
         print("Index initialized")
@@ -131,18 +161,24 @@ class SmartHnsw(BaseFilterANN):
         print("dtype:", self.dtype)
 
         # there's almost certainly a way to do this in less than 0.1s, which costs us ~200 QPS
-        rows, cols = historical_filters.nonzero()
-        filter_dict = defaultdict(list)
+        if not self.is_range:
+            rows, cols = historical_filters.nonzero()
+            filter_dict = defaultdict(list)
+    
+            for row, col in zip(rows, cols):
+                if row < self.historical_filters_percentage * historical_filters.shape[0]: 
+                    filter_dict[row].append(col)
+    
+            historical_filters_list = []
+            for i in filter_dict.keys():
+                historical_filters_list.append(hnswlib.QueryFilter(
+                    set(filter_dict[i]), self.is_and))
 
-        for row, col in zip(rows, cols):
-            if row < self.historical_filters_percentage * historical_filters.shape[0]: 
-                filter_dict[row].append(col)
-
-        historical_filters_list = []
-        for i in filter_dict.keys():
-            historical_filters_list.append(hnswlib.QueryFilter(
-                set(filter_dict[i]), self.is_and))
-
+        else:
+            historical_filters_list = []
+            for i in range(int(historical_filters.shape[0] * self.historical_filters_percentage)):
+                historical_filters_list.append(hnswlib.QueryFilter(historical_filters[i], self.is_and))
+            
         if hasattr(self, 'index'):
             print("Index already exists, skipping fit")
             return
@@ -160,7 +196,8 @@ class SmartHnsw(BaseFilterANN):
                 self.bitvector_cutoff,
                 self.workload_window_size,
                 self.heterogeneous_indexing,
-                self.num_index_construction_threads
+                True,
+                self.num_index_construction_threads,
             )
         if self.dtype == "float":
             self.index = hnswlib.HierarchicalIndexFloat(
@@ -175,7 +212,9 @@ class SmartHnsw(BaseFilterANN):
                 self.bitvector_cutoff,
                 self.workload_window_size,
                 self.heterogeneous_indexing,
-                self.num_index_construction_threads
+                True,
+                self.num_index_construction_threads,
+                self.is_range
             )
 
         print("Index initialized")
@@ -184,32 +223,69 @@ class SmartHnsw(BaseFilterANN):
     
     def filtered_query(self, X, filter, k):
         start = time.time()
+        if not self.is_range:
+            rows, cols = filter.nonzero()
+            filter_dict = defaultdict(list)
+    
+            for row, col in zip(rows, cols):
+                filter_dict[row].append(col)
+    
+            filters = [None] * X.shape[0]
+            for i in range(X.shape[0]):
+                if i in filter_dict.keys():
+                    filters[i] = hnswlib.QueryFilter(set(filter_dict[i]), self.is_and)
+                else:
+                    filters[i] = hnswlib.QueryFilter(set(), self.is_and)
+    
+            print(f"Filter construction took {time.time() - start} seconds")
+            search_start = time.time()
+            nq = X.shape[0]
+            self.res, times, cardinalities = self.index.batch_filter_search(
+                X,
+                filters,
+                nq,
+                k,
+                self.ef_search,
+                1
+            )
 
-        rows, cols = filter.nonzero()
-        filter_dict = defaultdict(list)
+            # Compute QPSes
+            gt = read_ibin("~/bigann/biganntest/data/paper/paper_gt.ibin")
 
-        for row, col in zip(rows, cols):
-            filter_dict[row].append(col)
+            # Sort cardinalities into bins
+            cardinalities_idx = [(cardinalities[i], i) for i in range(len(cardinalities))]
+            cardinalities_idx.sort()
 
-        filters = [None] * X.shape[0]
-        for i in range(X.shape[0]):
-            if i in filter_dict.keys():
-                filters[i] = hnswlib.QueryFilter(set(filter_dict[i]), self.is_and)
-            else:
-                filters[i] = hnswlib.QueryFilter(set(), self.is_and)
-
-        print(f"Filter construction took {time.time() - start} seconds")
-        search_start = time.time()
-        nq = X.shape[0]
-        print("ef search:", self.ef_search)
-        self.res = self.index.batch_filter_search(
-            X,
-            filters,
-            nq,
-            k,
-            self.ef_search,
-            1
-        )
+            # Compute QPS/recall of splits
+            splits = 5
+            points_per_split = int(len(cardinalities) // splits)
+            for i in range(splits):
+                print("split", i, ":")
+                print("split lower cardinality:", cardinalities_idx[int(i * points_per_split)][0])
+                print("split upper cardinality:", cardinalities_idx[int((i + 1) * points_per_split - 1)][0])
+                total_time = 0
+                total_recall = 0
+                for j in range(points_per_split):
+                    cur_idx = int(i * points_per_split + j)
+                    total_time += times[cardinalities_idx[cur_idx][1]]
+                    total_recall += len(set(gt[cardinalities_idx[cur_idx][1]]).intersection(self.res[cardinalities_idx[cur_idx][1]]))
+                print("QPS:", points_per_split / total_time)
+                print("recall:", total_recall / k / points_per_split)
+        else:
+            filters = [None] * X.shape[0]
+            for i in range(X.shape[0]):
+                filters[i] = hnswlib.QueryFilter(filter[i], self.is_and)
+            print(f"Filter construction took {time.time() - start} seconds")
+            search_start = time.time()
+            nq = X.shape[0]
+            self.res = self.index.batch_filter_search(
+                X,
+                filters,
+                nq,
+                k,
+                self.ef_search,
+                1
+            )
         print("result head:")
         print(self.res[:10])
         print(self.res.shape)

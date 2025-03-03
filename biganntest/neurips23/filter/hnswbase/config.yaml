@@ -44,10 +44,12 @@ yfcc-10M:
               "num_index_construction_threads": 96
             }]
           query-args: |
-            [{"ef_search": 30},
+            [{"ef_search": 10},
+            {"ef_search": 10},
             {"ef_search": 40},
-            {"ef_search": 50},
-            {"ef_search": 60}]
+            {"ef_search": 60},
+            {"ef_search": 80},
+            {"ef_search": 110}]
 
 paper:
     hnswbase:
@@ -125,10 +127,40 @@ sift:
             {"ef_search": 40},
             {"ef_search": 50},
             {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+siftrange:
+    hnswbase:
+      docker-tag: neurips23-filter-hnswbase
+      module: neurips23.filter.hnswbase.hnswbase
+      constructor: HnswBase
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "True",
+              "is_range": "True",
+              "M": 16,
+              "ef_construction": 40,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
             {"ef_search": 60},
-            {"ef_search": 60},
-            {"ef_search": 60},
-            {"ef_search": 60}]
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
 
 
 msong:
@@ -142,7 +174,36 @@ msong:
           args: |
             [{"is_and": "False",
               "M": 16,
-              "ef_construction": 80,
+              "ef_construction": 40,
+              "num_index_construction_threads": 96
+            }]
+          query-args: |
+            [{"ef_search": 10},
+            {"ef_search": 20},
+            {"ef_search": 30},
+            {"ef_search": 40},
+            {"ef_search": 50},
+            {"ef_search": 60},
+            {"ef_search": 70},
+            {"ef_search": 80},
+            {"ef_search": 90},
+            {"ef_search": 100},
+            {"ef_search": 110}]
+
+
+msongrange:
+    hnswbase:
+      docker-tag: neurips23-filter-hnswbase
+      module: neurips23.filter.hnswbase.hnswbase
+      constructor: HnswBase
+      base-args: ["@metric"]
+      run-groups:
+        base:
+          args: |
+            [{"is_and": "False",
+              "is_range": "True",
+              "M": 16,
+              "ef_construction": 40,
               "num_index_construction_threads": 96
             }]
           query-args: |
