@@ -1332,6 +1332,73 @@ class Paper(DatasetCompetitionFormat):
             return "knn"
 
 
+class PaperAnother(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 2029997
+        self.d = 200
+        self.nq = 10000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "paper_base.fbin"
+        self.qs_fn = "paper_query.fbin"
+        self.qs_private_fn = "paper_query.fbin"
+        self.ds_metadata_fn = "data_metadata.spmat"
+        self.qs_metadata_fn = "query_metadata.spmat"
+        self.qs_private_metadata_fn = "query_metadata.spmat"
+        # no subset as the database is pretty small.
+        self.gt_fn = "paper_gt.ibin"
+        self.gt_private_fn = "paper_gt.ibin"
+
+        self.private_gt_fn = "paper_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "paper_another")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.qs_metadata_fn))
+    
+    def get_private_queries_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.qs_private_metadata_fn))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
 class Uqv(DatasetCompetitionFormat):
     """ the 2023 competition """
 
@@ -1360,6 +1427,73 @@ class Uqv(DatasetCompetitionFormat):
             # data is uploaded but download script not ready.
         self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
         self.basedir = os.path.join(BASEDIR, "uqv")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.qs_metadata_fn))
+    
+    def get_private_queries_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.qs_private_metadata_fn))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
+class UqvAnother(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1000000
+        self.d = 256
+        self.nq = 10000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "uqv_base.fbin"
+        self.qs_fn = "uqv_query.fbin"
+        self.qs_private_fn = "uqv_query.fbin"
+        self.ds_metadata_fn = "uqv_data_attrs.spmat"
+        self.qs_metadata_fn = "uqv_query_attrs.spmat"
+        self.qs_private_metadata_fn = "uqv_query_attrs.spmat"
+        # no subset as the database is pretty small.
+        self.gt_fn = "uqv_gt.ibin"
+        self.gt_private_fn = "uqv_gt.ibin"
+
+        self.private_gt_fn = "uqv_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "uqv_another")
 
         self.private_nq = 10000
         self.private_qs_url = self.base_url + self.qs_private_fn
@@ -1464,6 +1598,275 @@ class UqvUpdate(DatasetCompetitionFormat):
             return "knn_filtered"
         else:
             return "knn"
+
+
+class Glove(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1183514
+        self.d = 100
+        self.nq = 10000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "glove-100_base.fbin"
+        self.qs_fn = "glove-100_query.fbin"
+        self.qs_private_fn = "glove-100_query.fbin"
+        self.ds_metadata_fn = "glove_data_attrs.fbin"
+        self.qs_metadata_fn = "glove_query_attrs.pkl"
+        self.qs_private_metadata_fn = "glove_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "glove_gt.ibin"
+        self.gt_private_fn = "glove_gt.ibin"
+
+        self.private_gt_fn = "glove_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "glove")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
+class GistAnother(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1000000
+        self.d = 960
+        self.nq = 1000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "gist_base.fbin"
+        self.qs_fn = "gist_query.fbin"
+        self.qs_private_fn = "gist_query.fbin"
+        self.ds_metadata_fn = "gist_data_attrs.fbin"
+        self.qs_metadata_fn = "gist_query_attrs.pkl"
+        self.qs_private_metadata_fn = "gist_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "gist_gt.ibin"
+        self.gt_private_fn = "gist_gt.ibin"
+
+        self.private_gt_fn = "gist_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "gist_another")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
+class Gist(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1000000
+        self.d = 960
+        self.nq = 1000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "gist_base.fbin"
+        self.qs_fn = "gist_query.fbin"
+        self.qs_private_fn = "gist_query.fbin"
+        self.ds_metadata_fn = "gist_data_attrs.fbin"
+        self.qs_metadata_fn = "gist_query_attrs.pkl"
+        self.qs_private_metadata_fn = "gist_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "gist_gt.ibin"
+        self.gt_private_fn = "gist_gt.ibin"
+
+        self.private_gt_fn = "gist_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "gist")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
+
+class Crawl(DatasetCompetitionFormat):
+    """ the 2023 competition """
+
+    def __init__(self, filtered=True, dummy=False):
+        self.filtered = filtered
+        self.nb = 1989995
+        self.d = 300
+        self.nq = 10000
+        self.dtype = "float32"
+        private_key = 2727415019
+        self.gt_private_fn = ""
+
+        # with Zilliz' CLIP descriptors
+        self.ds_fn = "crawl_base.fbin"
+        self.qs_fn = "crawl_query.fbin"
+        self.qs_private_fn = "crawl_query.fbin"
+        self.ds_metadata_fn = "crawl_data_attrs.fbin"
+        self.qs_metadata_fn = "crawl_query_attrs.pkl"
+        self.qs_private_metadata_fn = "crawl_query_attrs.pkl"
+        # no subset as the database is pretty small.
+        self.gt_fn = "crawl_gt.ibin"
+        self.gt_private_fn = "crawl_gt.ibin"
+
+        self.private_gt_fn = "crawl_gt.ibin"
+
+            # data is uploaded but download script not ready.
+        self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
+        self.basedir = os.path.join(BASEDIR, "crawl")
+
+        self.private_nq = 10000
+        self.private_qs_url = self.base_url + self.qs_private_fn
+        self.private_gt_url = self.base_url + self.gt_private_fn
+
+        self.metadata_base_url = self.base_url + self.ds_metadata_fn
+        self.metadata_queries_url = self.base_url + self.qs_metadata_fn
+        self.metadata_private_queries_url = self.base_url + self.qs_private_metadata_fn
+
+    def prepare(self, skip_data=False):
+        super().prepare(skip_data, 10**7)
+        for fn in (self.metadata_base_url, self.metadata_queries_url, 
+                   self.metadata_private_queries_url):
+            if fn:
+                outfile = os.path.join(self.basedir, fn.split("/")[-1])
+                if os.path.exists(outfile):
+                    print("file %s already exists" % outfile)
+                else:
+                    download(fn, outfile)
+
+    def get_dataset_metadata(self):
+        return read_sparse_matrix(os.path.join(self.basedir, self.ds_metadata_fn))
+
+    def get_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_metadata_fn), "rb"))
+    
+    def get_private_queries_metadata(self):
+        return pickle.load(open(os.path.join(self.basedir, self.qs_private_metadata_fn), "rb"))
+    
+    def distance(self):
+        return "euclidean"
+
+    def search_type(self):
+        if self.filtered:
+            return "knn_filtered"
+        else:
+            return "knn"
+
 
 
 class Sift(DatasetCompetitionFormat):
@@ -1907,11 +2310,17 @@ DATASETS = {
     'yfcc-10M-dummy-unfiltered': lambda: YFCC100MDataset(filtered=False, dummy=True),
 
     'uqv': lambda: Uqv(),
+    'uqv-another': lambda: UqvAnother(),
     'paper': lambda: Paper(),
+    'paper-another': lambda: PaperAnother(),
     'sift': lambda: Sift(),
     'siftrange': lambda: SiftRange(),
     'msong': lambda: Msong(),
+    'gist': lambda: Gist(),
+    'gist-another': lambda: GistAnother(),
     'msongrange': lambda: MsongRange(),
+    'glove': lambda: Glove(),
+    'crawl': lambda: Crawl(),
 
     'siftupdate': lambda: SiftUpdate(),
     'uqvupdate': lambda: UqvUpdate(),
