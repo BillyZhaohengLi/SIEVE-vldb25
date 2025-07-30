@@ -140,7 +140,8 @@ class Sieve(BaseFilterANN):
                 self.workload_window_size,
                 self.heterogeneous_indexing,
                 self.heterogeneous_search,
-                self.num_index_construction_threads
+                self.num_index_construction_threads,
+                is_range = self.is_range
             )
             # start = time.time()
             # self.index.update_index(historical_filters_2nd_half_list)
@@ -161,91 +162,14 @@ class Sieve(BaseFilterANN):
                 self.heterogeneous_indexing,
                 self.heterogeneous_search,
                 self.num_index_construction_threads,
-                self.is_range
+                is_range = self.is_range
             )
 
         print("Index initialized")
         print(f"Index fit in {time.time() - start} seconds")
 
     def load_index(self, dataset):
-        start = time.time()
-        ds = DATASETS[dataset]()
-        self.dtype = self.translate_dtype(ds.dtype)
-        historical_filters = pickle.load(open(self.historical_filters_file, "rb"))
-        print("dtype:", self.dtype)
-
-        # there's almost certainly a way to do this in less than 0.1s, which costs us ~200 QPS
-        if not self.is_range:
-            rows, cols = historical_filters.nonzero()
-            filter_dict = defaultdict(list)
-            filter_dict_2nd_half = defaultdict(list)
-    
-            for row, col in zip(rows, cols):
-                if row < self.historical_filters_percentage * historical_filters.shape[0]: 
-                    filter_dict[row].append(col)
-                else:
-                    filter_dict_2nd_half[row].append(col)
-    
-            historical_filters_list = []
-            for i in filter_dict.keys():
-                historical_filters_list.append(hnswlib.QueryFilter(
-                    set(filter_dict[i]), self.is_and))
-
-            historical_filters_2nd_half_list = []
-            for i in filter_dict_2nd_half.keys():
-                historical_filters_2nd_half_list.append(hnswlib.QueryFilter(
-                    set(filter_dict_2nd_half[i]), self.is_and))
-
-        else:
-            historical_filters_list = []
-            for i in range(int(historical_filters.shape[0] * self.historical_filters_percentage)):
-                historical_filters_list.append(hnswlib.QueryFilter(historical_filters[i], self.is_and))
-            
-        if hasattr(self, 'index'):
-            print("Index already exists, skipping fit")
-            return
-        
-        if self.dtype == "uint8":
-            self.index = hnswlib.HierarchicalIndexUint8(
-                ds.get_dataset_fn(),
-                os.path.join(ds.basedir, ds.ds_metadata_fn),
-                historical_filters_list,
-                ds.nb,
-                ds.d,
-                self.M,
-                self.ef_construction,
-                int(self.index_budget * ds.nb),
-                self.bitvector_cutoff,
-                self.workload_window_size,
-                self.heterogeneous_indexing,
-                self.heterogeneous_search,
-                self.num_index_construction_threads
-            )
-            # start = time.time()
-            # self.index.update_index(historical_filters_2nd_half_list)
-            # print("time to update index:", time.time() - start)
-
-        if self.dtype == "float":
-            self.index = hnswlib.HierarchicalIndexFloat(
-                ds.get_dataset_fn(),
-                os.path.join(ds.basedir, ds.ds_metadata_fn),
-                historical_filters_list,
-                ds.nb,
-                ds.d,
-                self.M,
-                self.ef_construction,
-                int(self.index_budget * ds.nb),
-                self.bitvector_cutoff,
-                self.workload_window_size,
-                self.heterogeneous_indexing,
-                self.heterogeneous_search,
-                self.num_index_construction_threads,
-                self.is_range
-            )
-
-        print("Index initialized")
-        # self.index.print_stats()
-        print(f"Index fit in {time.time() - start} seconds")
+        pass
     
     def filtered_query(self, X, filter, k):
         start = time.time()

@@ -144,12 +144,25 @@ class HierarchicalIndexBase {
         bool enable_heterogeneous_indexing,
         bool enable_heterogeneous_search,
         size_t num_threads,
+        float query_correlation_constant = 0.5,
+        float ef_search_scaling_constant = 3,
+        bool enable_multipartition_search = false,
         bool is_range = false
     ) : _dataset_size(dataset_size), _is_range(is_range) {
         hnswlib::PartitionedIndexParams index_params{
-            dataset_size, dim, M, ef_construction,
-            index_vector_budget, bitvector_cutoff, historical_workload_window_size,
-            enable_heterogeneous_indexing, enable_heterogeneous_search, 0.5, num_threads
+            dataset_size,
+            dim,
+            M,
+            ef_construction,
+            index_vector_budget,
+            bitvector_cutoff,
+            historical_workload_window_size,
+            enable_heterogeneous_indexing,
+            enable_heterogeneous_search,
+            query_correlation_constant,
+            ef_search_scaling_constant,
+            enable_multipartition_search,
+            num_threads
         };
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -235,7 +248,7 @@ public:
         size_t bitvector_cutoff,
         bool enable_heterogeneous_indexing,
         size_t num_threads,
-        bool is_range
+        bool is_range = false
     ) : HierarchicalIndexBase<uint8_t, hnswlib::L2SpaceX, hnswlib::PartitionedHNSW<int, uint8_t>>(
             filename,
             filter_filename,
@@ -250,6 +263,9 @@ public:
             enable_heterogeneous_indexing,
             false, // enable_heterogeneous_search
             num_threads,
+            0.5f, // query_correlation_constant
+            3.0f, // ef_search_scaling_constant
+            false, // enable_multipartition_search
             is_range
         )
     {}
@@ -268,7 +284,7 @@ public:
         size_t bitvector_cutoff,
         bool enable_heterogeneous_indexing,
         size_t num_threads,
-        bool is_range
+        bool is_range = false
     ) : HierarchicalIndexBase<float, hnswlib::L2Space, hnswlib::PartitionedHNSW<float, float>>(
             filename,
             filter_filename,
@@ -283,6 +299,9 @@ public:
             enable_heterogeneous_indexing,
             false, // enable_heterogeneous_search
             num_threads,
+            0.5f, // query_correlation_constant
+            3.0f, // ef_search_scaling_constant
+            false, // enable_multipartition_search
             is_range
         )
     {}
@@ -777,67 +796,139 @@ class Caps {
 };
 
 PYBIND11_MODULE(hnswlib, m) {
-    // should have initializers taking either one or two int32_t arguments
     py::class_<hnswlib::QueryFilter>(m, "QueryFilter")
-    .def(py::init<std::unordered_set<int32_t>, bool>(), py::arg("filters"), py::arg("is_and"))
-    .def(py::init<std::vector<float>, bool>(), py::arg("filters"), py::arg("is_and"));
+        .def(py::init<std::unordered_set<int32_t>, bool>(),
+             py::arg("filters"), py::arg("is_and"))
+        .def(py::init<std::vector<float>, bool>(),
+             py::arg("filters"), py::arg("is_and"));
 
     py::class_<HierarchicalIndexUint8>(m, "HierarchicalIndexUint8")
-    .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, bool, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("enable_heterogeneous_search"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("update_index", &HierarchicalIndexUint8::update_index)
-    .def("batch_filter_search", &HierarchicalIndexUint8::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, std::vector<hnswlib::QueryFilter>&,
+                size_t, size_t, size_t, size_t, size_t, size_t, size_t,
+                bool, bool, size_t, float, float, bool, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("historical_workload"), py::arg("dataset_size"),
+             py::arg("dim"), py::arg("M"), py::arg("ef_construction"),
+             py::arg("index_vector_budget"), py::arg("bitvector_cutoff"),
+             py::arg("historical_workload_window_size"),
+             py::arg("enable_heterogeneous_indexing"),
+             py::arg("enable_heterogeneous_search"),
+             py::arg("num_threads"),
+             py::arg("query_correlation_constant") = 0.5f,
+             py::arg("ef_search_scaling_constant") = 3.0f,
+             py::arg("enable_multipartition_search") = false,
+             py::arg("is_range") = false)
+        .def("update_index", &HierarchicalIndexUint8::update_index)
+        .def("batch_filter_search", &HierarchicalIndexUint8::batch_filter_search);
 
     py::class_<HierarchicalIndexFloat>(m, "HierarchicalIndexFloat")
-    .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, size_t, size_t, bool, bool, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("index_vector_budget"), py::arg("bitvector_cutoff"), py::arg("historical_workload_window_size"), py::arg("enable_heterogeneous_indexing"), py::arg("enable_heterogeneous_search"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("update_index", &HierarchicalIndexFloat::update_index)
-    .def("batch_filter_search", &HierarchicalIndexFloat::batch_filter_search);
-
-    py::class_<PreFilterUint8>(m, "PreFilterUint8")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &PreFilterUint8::batch_filter_search);
-
-    py::class_<PreFilterFloat>(m, "PreFilterFloat")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &PreFilterFloat::batch_filter_search);
-
-    py::class_<HNSWBaseUint8>(m, "HNSWBaseUint8")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &HNSWBaseUint8::batch_filter_search);
-
-    py::class_<HNSWBaseFloat>(m, "HNSWBaseFloat")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &HNSWBaseFloat::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, std::vector<hnswlib::QueryFilter>&,
+                size_t, size_t, size_t, size_t, size_t, size_t, size_t,
+                bool, bool, size_t, float, float, bool, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("historical_workload"), py::arg("dataset_size"),
+             py::arg("dim"), py::arg("M"), py::arg("ef_construction"),
+             py::arg("index_vector_budget"), py::arg("bitvector_cutoff"),
+             py::arg("historical_workload_window_size"),
+             py::arg("enable_heterogeneous_indexing"),
+             py::arg("enable_heterogeneous_search"),
+             py::arg("num_threads"),
+             py::arg("query_correlation_constant") = 0.5f,
+             py::arg("ef_search_scaling_constant") = 3.0f,
+             py::arg("enable_multipartition_search") = false,
+             py::arg("is_range") = false)
+        .def("update_index", &HierarchicalIndexFloat::update_index)
+        .def("batch_filter_search", &HierarchicalIndexFloat::batch_filter_search);
 
     py::class_<OraclePartitionUint8>(m, "OraclePartitionUint8")
-    .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, bool, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("bitvector_cutoff"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("update_index", &OraclePartitionUint8::update_index)
-    .def("batch_filter_search", &OraclePartitionUint8::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, std::vector<hnswlib::QueryFilter>&,
+                size_t, size_t, size_t, size_t, size_t, bool, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("historical_workload"), py::arg("dataset_size"),
+             py::arg("dim"), py::arg("M"), py::arg("ef_construction"),
+             py::arg("bitvector_cutoff"),
+             py::arg("enable_heterogeneous_indexing"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("update_index", &OraclePartitionUint8::update_index)
+        .def("batch_filter_search", &OraclePartitionUint8::batch_filter_search);
 
     py::class_<OraclePartitionFloat>(m, "OraclePartitionFloat")
-    .def(py::init<std::string, std::string, std::vector<hnswlib::QueryFilter>&, size_t, size_t, size_t, size_t, size_t, bool, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("historical_workload"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("ef_construction"), py::arg("bitvector_cutoff"), py::arg("enable_heterogeneous_indexing"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("update_index", &OraclePartitionFloat::update_index)
-    .def("batch_filter_search", &OraclePartitionFloat::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, std::vector<hnswlib::QueryFilter>&,
+                size_t, size_t, size_t, size_t, size_t, bool, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("historical_workload"), py::arg("dataset_size"),
+             py::arg("dim"), py::arg("M"), py::arg("ef_construction"),
+             py::arg("bitvector_cutoff"),
+             py::arg("enable_heterogeneous_indexing"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("update_index", &OraclePartitionFloat::update_index)
+        .def("batch_filter_search", &OraclePartitionFloat::batch_filter_search);
 
-    py::class_<Caps>(m, "Caps")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("num_clusters"), py::arg("num_threads"))
-    .def("batch_filter_search", &Caps::batch_filter_search);
+    py::class_<PreFilterUint8>(m, "PreFilterUint8")
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &PreFilterUint8::batch_filter_search);
+
+    py::class_<PreFilterFloat>(m, "PreFilterFloat")
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &PreFilterFloat::batch_filter_search);
+
+    py::class_<HNSWBaseUint8>(m, "HNSWBaseUint8")
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, size_t, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("M"), py::arg("ef_construction"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &HNSWBaseUint8::batch_filter_search);
+
+    py::class_<HNSWBaseFloat>(m, "HNSWBaseFloat")
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, size_t, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("M"), py::arg("ef_construction"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &HNSWBaseFloat::batch_filter_search);
 
     py::class_<AcornIndexUint8>(m, "AcornIndexUint8")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, float, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("gamma"), py::arg("m_beta"), py::arg("bruteforce_selectivity_threshold"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &AcornIndexUint8::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, size_t,
+                size_t, float, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("M"), py::arg("gamma"), py::arg("m_beta"),
+             py::arg("bruteforce_selectivity_threshold"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &AcornIndexUint8::batch_filter_search);
 
     py::class_<AcornIndexFloat>(m, "AcornIndexFloat")
-    .def(py::init<std::string, std::string, size_t, size_t, size_t, size_t, size_t, float, size_t, bool>(),
-        py::arg("filename"), py::arg("filter_filename"), py::arg("dataset_size"), py::arg("dim"), py::arg("M"), py::arg("gamma"), py::arg("m_beta"), py::arg("bruteforce_selectivity_threshold"), py::arg("num_threads"), py::arg("is_range") = false)
-    .def("batch_filter_search", &AcornIndexFloat::batch_filter_search);
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, size_t,
+                size_t, float, size_t, bool>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("M"), py::arg("gamma"), py::arg("m_beta"),
+             py::arg("bruteforce_selectivity_threshold"),
+             py::arg("num_threads"), py::arg("is_range") = false)
+        .def("batch_filter_search", &AcornIndexFloat::batch_filter_search);
+
+    py::class_<Caps>(m, "Caps")
+        .def(py::init<
+                std::string, std::string, size_t, size_t, size_t, size_t>(),
+             py::arg("filename"), py::arg("filter_filename"),
+             py::arg("dataset_size"), py::arg("dim"),
+             py::arg("num_clusters"), py::arg("num_threads"))
+        .def("batch_filter_search", &Caps::batch_filter_search);
 }
