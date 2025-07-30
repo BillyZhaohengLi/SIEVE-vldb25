@@ -109,8 +109,7 @@ struct QueryFilter {
         return false;
     }
 
-    bool operator==(const QueryFilter& rhs) const
-    {
+    bool operator==(const QueryFilter& rhs) const {
         if (!_is_range) {
             return _filters == rhs._filters && _is_and == rhs._is_and;
         }
@@ -120,39 +119,26 @@ struct QueryFilter {
     bool is_subset(const QueryFilter& rhs) const {
         if (!_is_range) {
             // RHS is root partition
-            if (rhs._filters.size() == 0) {
+            if (rhs._filters.empty()) {
                 return true;
             }
-    
+
             if (_is_and != rhs._is_and) {
                 return false;
             }
-    
+
             if (_is_and) {
-                if (_filters.size() < rhs._filters.size()) {
-                    return false;
-                }
-                for (const auto& elem : rhs._filters) {
-                    if (_filters.find(elem) == _filters.end()) {
-                        return false;
-                    }
-                }
-                return true;
+                // All elements of rhs must be in _filters
+                return std::all_of(rhs._filters.begin(), rhs._filters.end(),
+                                   [&](int32_t elem) { return _filters.count(elem); });
             } else {
-                if (_filters.size() > rhs._filters.size()) {
-                    return false;
-                }
-                for (const auto& elem : _filters) {
-                    if (rhs._filters.find(elem) == rhs._filters.end()) {
-                        return false;
-                    }
-                }
-                return true;
+                // All elements of _filters must be in rhs
+                return std::all_of(_filters.begin(), _filters.end(),
+                                   [&](int32_t elem) { return rhs._filters.count(elem); });
             }
         }
-        bool first_pair_subset = _first_pair.first >= rhs._first_pair.first && _first_pair.second <= rhs._first_pair.second;
-        bool second_pair_subset = _second_pair.first >= rhs._second_pair.first && _second_pair.second <= rhs._second_pair.second;
-        return first_pair_subset && second_pair_subset;
+        return _first_pair.first >= rhs._first_pair.first && _first_pair.second <= rhs._first_pair.second &&
+               _second_pair.first >= rhs._second_pair.first && _second_pair.second <= rhs._second_pair.second;
     }
 
     std::size_t hash() const {
@@ -178,7 +164,6 @@ struct QueryFilterHash
 {
   std::size_t operator()(const QueryFilter& k) const
   {
-    // return size_t(k.a) << 32 | k.b;
     return k.hash();
   }
 };
@@ -191,23 +176,19 @@ struct RoaringBitmapHash
 };
 
 inline size_t first_greater_than_or_equal_to(
-    const uint64_t n_points,
-    const float &filter_value,
-    const std::unique_ptr<float[]> &filter_values) {
-  if (filter_values[0] >= filter_value) {
-    return 0;
-  }
-  size_t start = 0;
-  size_t end = n_points;
-  while (start + 1 < end) {
-    size_t mid = (start + end) / 2;
-    if (filter_values[mid] >= filter_value) {
-      end = mid;
-    } else {
-      start = mid;
+    uint64_t n_points,
+    float filter_value,
+    const std::unique_ptr<float[]>& filter_values) {
+    size_t left = 0, right = n_points;
+    while (left < right) {
+        size_t mid = left + (right - left) / 2;
+        if (filter_values[mid] < filter_value) {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
     }
-  }
-  return end;
+    return left;
 }
 
 struct DatasetFilters{
@@ -238,35 +219,24 @@ struct DatasetFilters{
             exit(1);
         }
 
-        std::cout << "start fread" << std::endl << std::flush;
-
         // reading in number of points, filters, and nonzeros
         fread(&n_points, sizeof(uint64_t), 1, fp);
         fread(&n_filters, sizeof(uint64_t), 1, fp);
         fread(&n_nonzero, sizeof(uint64_t), 1, fp);
 
-        std::cout << "fread" << n_points << " " << n_filters << " " << n_nonzero << std::endl << std::flush;
-
         // reading in row offsets
         row_offsets = std::make_unique<uint64_t[]>(n_points + 1);
         fread(row_offsets.get(), sizeof(uint64_t), n_points + 1, fp);
-
-        std::cout << "fread row offsets" << std::endl << std::flush;
 
         // reading in row indices
         row_indices = std::make_unique<uint32_t[]>(n_nonzero);
         fread(row_indices.get(), sizeof(int32_t), n_nonzero, fp);
 
-        std::cout << "fread row indices" << row_indices[n_nonzero - 1] << std::endl << std::flush;
-
         fclose(fp);
-
-        std::cout << "fclose" << std::endl << std::flush;
 
         for (uint64_t i = 0; i < n_points; i++) {
             std::sort(row_indices.get() + row_offsets[i], row_indices.get() + row_offsets[i + 1]);
         }
-        std::cout << "sort indices" << std::endl << std::flush;
         
         // transpose_inplace();
         // std::cout << "transpose" << std::endl << std::flush;
@@ -300,15 +270,7 @@ struct DatasetFilters{
         second_row = std::make_unique<float[]>(n_points);
         fread(second_row.get(), sizeof(float), n_points, fp);
 
-        std::cout << "fread second row" << std::endl << std::flush;
-
         fclose(fp);
-
-        std::cout << "fclose" << std::endl << std::flush;
-        std::cout << "float size:" << sizeof(float) << std::endl;
-        std::cout << "sanity check: " << first_row[0] << " " << first_row[1] << " " << first_row[2] << std::endl;
-        std::cout << "sanity check: " << second_row[0] << " " << second_row[1] << " " << second_row[2] << std::endl;
-
     }
 
     /* transposes the filters in place */
@@ -319,22 +281,18 @@ struct DatasetFilters{
             std::unique_ptr<uint64_t[]> new_row_offsets = std::make_unique<uint64_t[]>(n_filters + 1);
             std::unique_ptr<uint32_t[]> new_row_indices = std::make_unique<uint32_t[]>(n_nonzero);
     
-    
             memset(new_row_offsets.get(), 0, (n_filters + 1) * sizeof(uint64_t)); // initializing to 0s
-            std::cout << "Memset" << std::endl;
     
             std::cout << n_filters + 1 << std::endl;
             // counting points associated with each filter and scanning to get row offsets
             for (uint64_t i = 0; i < n_nonzero; i++) {
                 new_row_offsets[row_indices[i] + 1]++;
             }
-            std::cout << "Count points" << std::endl;
     
             // not a sequence so for now I'll just do it serially
             for (uint64_t i = 1; i < n_filters + 1; i++) {
                 new_row_offsets[i] += new_row_offsets[i - 1];
             }
-            std::cout << "Offsets computed" << std::endl;
     
             // int64_t* tmp_offset = (int64_t*) malloc(n_filters * sizeof(int64_t)); // temporary array to keep track of where to put the next point in each filter
             std::unique_ptr<uint64_t[]> tmp_offset = std::make_unique<uint64_t[]>(n_filters);
@@ -352,12 +310,7 @@ struct DatasetFilters{
                 }
             }
     
-            // free(tmp_offset);
-    
             std::swap(this->n_points, this->n_filters);
-    
-            // delete[] this->row_offsets;
-            // delete[] this->row_indices;
     
             this->row_offsets = std::move(new_row_offsets);
             this->row_indices = std::move(new_row_indices);
@@ -370,13 +323,15 @@ struct DatasetFilters{
     void make_bvs() {
         if (!is_range) {
             filter_bvs.resize(n_points);
-            ParallelFor(0, n_points, _num_threads, [&](size_t i, size_t threadId) {
-                std::vector<uint32_t> matching_points = std::vector<uint32_t>(row_indices.get() + row_offsets[i], row_indices.get() + row_offsets[i + 1]);
+            ParallelFor(0, n_points, _num_threads, [&](size_t i, size_t) {
+                auto start = row_offsets[i];
+                auto end = row_offsets[i + 1];
                 roaring::Roaring* query_bitset = new roaring::Roaring;
-                query_bitset->addMany(matching_points.size(), &matching_points[0]);
-                //query_bitset->runOptimize();
+                if (end > start) {
+                    query_bitset->addMany(end - start, row_indices.get() + start);
+                }
                 filter_bvs[i] = query_bitset;
-            }); 
+            });
             base_bv = new roaring::Roaring;
             base_bv->addRange(0, n_filters);
         } else {
@@ -388,115 +343,93 @@ struct DatasetFilters{
 
     void insert_multifilter_bv(QueryFilter q) {
         if (!is_range) {
-            if (multifilters_bvs.find(q) == multifilters_bvs.end()) {
-                if (q._is_and) {
-                    roaring::Roaring tmp_bv;
-                    bool initialized = false;
-                    for (const auto& elem : q._filters) {
-                        if (!initialized) {
-                            tmp_bv = *filter_bvs[elem];
-                            initialized = true;
-                        } else {
-                            tmp_bv &= *filter_bvs[elem];
-                        }
-                    }
-                    multifilters_bvs[q] = new roaring::Roaring(tmp_bv);
+            if (multifilters_bvs.find(q) != multifilters_bvs.end()) return;
+
+            roaring::Roaring tmp_bv;
+            bool first = true;
+            for (const auto& elem : q._filters) {
+                if (first) {
+                    tmp_bv = *filter_bvs[elem];
+                    first = false;
                 } else {
-                    roaring::Roaring tmp_bv;
-                    bool initialized = false;
-                    for (const auto& elem : q._filters) {
-                        if (!initialized) {
-                            tmp_bv = *filter_bvs[elem];
-                            initialized = true;
-                        } else {
-                            tmp_bv |= *filter_bvs[elem];
-                        }
-                    }
-                    multifilters_bvs[q] = new roaring::Roaring(tmp_bv);
+                    if (q._is_and) {
+                        tmp_bv &= *filter_bvs[elem];
+                    } else {
+                        tmp_bv |= *filter_bvs[elem];
+                    }  
                 }
             }
-        }
-        else {
-            auto first_inclusive_start = first_greater_than_or_equal_to(n_points, q._first_pair.first, first_row);
-            auto first_exclusive_end = first_greater_than_or_equal_to(n_points, q._first_pair.second, first_row);
-            auto second_inclusive_start = first_greater_than_or_equal_to(n_points, q._second_pair.first, second_row);
-            auto second_exclusive_end = first_greater_than_or_equal_to(n_points, q._second_pair.second, second_row);
-    
+            multifilters_bvs[q] = new roaring::Roaring(tmp_bv);
+        } else {
+            auto first_start = first_greater_than_or_equal_to(n_points, q._first_pair.first, first_row);
+            auto first_end = first_greater_than_or_equal_to(n_points, q._first_pair.second, first_row);
+            auto second_start = first_greater_than_or_equal_to(n_points, q._second_pair.first, second_row);
+            auto second_end = first_greater_than_or_equal_to(n_points, q._second_pair.second, second_row);
+
             roaring::Roaring tmp_bv;
             if (q._is_and) {
-                tmp_bv.addRange(
-                    std::max(first_inclusive_start, second_inclusive_start),
-                    std::min(first_exclusive_end, second_exclusive_end)
-                );
+                tmp_bv.addRange(std::max(first_start, second_start), std::min(first_end, second_end));
             } else {
-                tmp_bv.addRange(first_inclusive_start, first_exclusive_end);
-                tmp_bv.addRange(second_inclusive_start, second_exclusive_end);
+                tmp_bv.addRange(first_start, first_end);
+                tmp_bv.addRange(second_start, second_end);
             }
             bvs[q] = new roaring::Roaring(tmp_bv);
         }
     }
 
-    bool is_bitvector_cached(QueryFilter q) {
+    bool is_bitvector_cached(const QueryFilter& q) {
         if (!is_range) {
-            if (!q.is_single_filter()) {
-                return multifilters_bvs.find(q) != multifilters_bvs.end();
-            }
-            return true;
-        }
-        else {
+            // Single filter bitvectors are always available
+            return q.is_single_filter() || multifilters_bvs.find(q) != multifilters_bvs.end();
+        } else {
             return bvs.find(q) != bvs.end();
         }
     }
 
-    // std::vector<uint32_t> query_matches(QueryFilter q) {
     roaring::Roaring* query_matches(QueryFilter q) {
         if (!is_range) {
-            if (not transposed) {
+            if (!transposed) {
                 std::cout << "You are attempting to query a non-transposed csr_filter. This would require iterating over all the points in the dataset, which is almost certainly not what you want to do. Transpose this object." << std::endl;
                 exit(1);
-            };
+            }
+            // Handle multi-filter queries
             if (q._filters.size() > 1) {
-                if (is_bitvector_cached(q)) {
-                    return multifilters_bvs[q];
+                if (!is_bitvector_cached(q)) {
+                    insert_multifilter_bv(q);
                 }
-                insert_multifilter_bv(q);
                 return multifilters_bvs[q];
-            } else if (q._filters.size() == 0) {
+            }
+            // Handle empty filter (root partition)
+            if (q._filters.empty()) {
                 return base_bv;
-            } else {
-                return filter_bvs[*q._filters.begin()];
             }
-        }
-        else {
-            if (is_bitvector_cached(q)) {
-                return bvs[q];
+            // Handle single filter
+            return filter_bvs[*q._filters.begin()];
+        } else {
+            if (!is_bitvector_cached(q)) {
+                insert_multifilter_bv(q);
             }
-            insert_multifilter_bv(q);
             return bvs[q];
         }
     }
 };
 
-std::vector<std::pair<QueryFilter, size_t>> tally_query_filters (
-  const std::vector<QueryFilter>& query_filters,
-  DatasetFilters* dataset_filters,
-  size_t bitvector_cutoff
+std::vector<std::pair<QueryFilter, size_t>> tally_query_filters(
+    const std::vector<QueryFilter>& query_filters,
+    DatasetFilters* dataset_filters,
+    size_t bitvector_cutoff
 ) {
-    std::unordered_map<QueryFilter, size_t, QueryFilterHash> tmp_set;
-    for (auto query_filter : query_filters) {
+    std::unordered_map<QueryFilter, size_t, QueryFilterHash> filter_counts;
+    for (const auto& query_filter : query_filters) {
+        // Skip filters with bitvector cardinality below cutoff
         if (dataset_filters->query_matches(query_filter)->cardinality() < bitvector_cutoff) {
             continue;
         }
-        if (tmp_set.find(query_filter) != tmp_set.end()) {
-            tmp_set[query_filter]++;
-        } else {
-            tmp_set[query_filter] = 1;
-        }
+        filter_counts[query_filter]++;
     }
 
-    std::vector<std::pair<QueryFilter, size_t>> tmp_vec;
-    std::copy(tmp_set.begin(), tmp_set.end(), back_inserter(tmp_vec)); 
-    return tmp_vec;
+    std::vector<std::pair<QueryFilter, size_t>> result(filter_counts.begin(), filter_counts.end());
+    return result;
 }
 
 class BitMapFilter: public hnswlib::BaseFilterFunctor {
