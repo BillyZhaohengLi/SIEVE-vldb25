@@ -212,65 +212,62 @@ struct DatasetFilters{
     DatasetFilters() = default;
 
     /* mmaps filter data in csr form from filename */
-    DatasetFilters(FILE* fp, size_t num_threads) : _num_threads(num_threads) {
-        // opening file stream
-        if (fp == NULL) {
-            fprintf(stderr, "Error opening file");
-            exit(1);
+    DatasetFilters(FILE* fp, size_t num_threads, bool is_range) : _num_threads(num_threads), is_range(is_range) {
+        if (!is_range) {
+            // opening file stream
+            if (fp == NULL) {
+                fprintf(stderr, "Error opening file");
+                exit(1);
+            }
+
+            // reading in number of points, filters, and nonzeros
+            fread(&n_points, sizeof(uint64_t), 1, fp);
+            fread(&n_filters, sizeof(uint64_t), 1, fp);
+            fread(&n_nonzero, sizeof(uint64_t), 1, fp);
+
+            // reading in row offsets
+            row_offsets = std::make_unique<uint64_t[]>(n_points + 1);
+            fread(row_offsets.get(), sizeof(uint64_t), n_points + 1, fp);
+
+            // reading in row indices
+            row_indices = std::make_unique<uint32_t[]>(n_nonzero);
+            fread(row_indices.get(), sizeof(int32_t), n_nonzero, fp);
+
+            fclose(fp);
+
+            for (uint64_t i = 0; i < n_points; i++) {
+                std::sort(row_indices.get() + row_offsets[i], row_indices.get() + row_offsets[i + 1]);
+            }
+            
+            // transpose_inplace();
+            // std::cout << "transpose" << std::endl << std::flush;
+            // make_bvs();
+            // std::cout << "make bvs" << std::endl << std::flush;
+        } else {
+            // opening file stream
+            if (fp == NULL) {
+                fprintf(stderr, "Error opening file");
+                exit(1);
+            }
+
+            std::cout << "start fread" << std::endl << std::flush;
+
+            // reading in number of points, filters, and nonzeros
+            fread(&n_filters, sizeof(uint64_t), 1, fp);
+            fread(&n_points, sizeof(uint64_t), 1, fp);
+
+            std::cout << "fread" << n_points << std::endl << std::flush;
+
+            // reading in first row
+            first_row = std::make_unique<float[]>(n_points);
+            fread(first_row.get(), sizeof(float), n_points, fp);
+
+            // reading in row indices
+            second_row = std::make_unique<float[]>(n_points);
+            fread(second_row.get(), sizeof(float), n_points, fp);
+
+            fclose(fp);
         }
-
-        // reading in number of points, filters, and nonzeros
-        fread(&n_points, sizeof(uint64_t), 1, fp);
-        fread(&n_filters, sizeof(uint64_t), 1, fp);
-        fread(&n_nonzero, sizeof(uint64_t), 1, fp);
-
-        // reading in row offsets
-        row_offsets = std::make_unique<uint64_t[]>(n_points + 1);
-        fread(row_offsets.get(), sizeof(uint64_t), n_points + 1, fp);
-
-        // reading in row indices
-        row_indices = std::make_unique<uint32_t[]>(n_nonzero);
-        fread(row_indices.get(), sizeof(int32_t), n_nonzero, fp);
-
-        fclose(fp);
-
-        for (uint64_t i = 0; i < n_points; i++) {
-            std::sort(row_indices.get() + row_offsets[i], row_indices.get() + row_offsets[i + 1]);
-        }
-        
-        // transpose_inplace();
-        // std::cout << "transpose" << std::endl << std::flush;
-        // make_bvs();
-        // std::cout << "make bvs" << std::endl << std::flush;
-    }
-
-    /* mmaps filter data in csr form from filename */
-    DatasetFilters(FILE* fp, size_t num_threads, bool is_range) : _num_threads(num_threads), is_range(true) {
-        // opening file stream
-        if (fp == NULL) {
-            fprintf(stderr, "Error opening file");
-            exit(1);
-        }
-
-        std::cout << "start fread" << std::endl << std::flush;
-
-        // reading in number of points, filters, and nonzeros
-        fread(&n_filters, sizeof(uint64_t), 1, fp);
-        fread(&n_points, sizeof(uint64_t), 1, fp);
-
-        std::cout << "fread" << n_points << std::endl << std::flush;
-
-        // reading in first row
-        first_row = std::make_unique<float[]>(n_points);
-        fread(first_row.get(), sizeof(float), n_points, fp);
-
-        std::cout << "fread first row" << std::endl << std::flush;
-
-        // reading in row indices
-        second_row = std::make_unique<float[]>(n_points);
-        fread(second_row.get(), sizeof(float), n_points, fp);
-
-        fclose(fp);
     }
 
     /* transposes the filters in place */

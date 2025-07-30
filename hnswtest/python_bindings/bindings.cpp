@@ -87,6 +87,34 @@ float Faiss_fvec_L2sqr(const float* x, const float* y, size_t d) {
     return _mm_cvtss_f32(msum2);
 }
 
+template <typename T>
+void read_dataset_and_filters(
+    const std::string& filename,
+    const std::string& filter_filename,
+    size_t dataset_size,
+    size_t dim,
+    size_t num_threads,
+    bool is_range,
+    T*& data_out,
+    hnswlib::DatasetFilters*& filters_out
+) {
+    // setup filters
+    filters_out = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, is_range);
+    filters_out->transpose_inplace();
+    filters_out->make_bvs();
+
+    // setup data
+    std::ifstream reader(filename);
+    assert(reader.is_open());
+    size_t num_points;
+    size_t d;
+    reader.read((char*)(&num_points), sizeof(unsigned int));
+    reader.read((char*)(&d), sizeof(unsigned int));
+
+    data_out = new T[dim * dataset_size];
+    reader.read((char*)data_out, sizeof(T) * dim * dataset_size);
+}
+
 // Base template for HierarchicalIndex
 template <typename T, typename SpaceType, typename AlgType>
 class HierarchicalIndexBase {
@@ -125,22 +153,9 @@ class HierarchicalIndexBase {
         };
 
         auto start = std::chrono::high_resolution_clock::now();
-
-        // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, is_range);
-        dataset_filters->transpose_inplace();
-        dataset_filters->make_bvs();
-
-        // setup data
-        std::ifstream reader(filename, std::ios::binary);
-        assert(reader.is_open());
-        size_t num_points, d;
-        reader.read(reinterpret_cast<char*>(&num_points), sizeof(unsigned int));
-        reader.read(reinterpret_cast<char*>(&d), sizeof(unsigned int));
-
-        _data = new T[dim * dataset_size];
-        reader.read(reinterpret_cast<char*>(_data), sizeof(T) * dim * dataset_size);
-
+        read_dataset_and_filters<T>(
+            filename, filter_filename, dataset_size, dim, num_threads, is_range, _data, dataset_filters
+        );
         auto end = std::chrono::high_resolution_clock::now();
         std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
@@ -151,7 +166,6 @@ class HierarchicalIndexBase {
             SpaceType* space = new SpaceType(dim);
             alg = new AlgType(_data, space, dataset_filters, index_params, historical_workload);
         }
-
     }
 
     void update_index(const std::vector<hnswlib::QueryFilter>& historical_workload) {
@@ -279,6 +293,7 @@ class PreFilterBase {
  public:
     T* _data;
     hnswlib::DatasetFilters* dataset_filters;
+    hnswlib::SpaceInterface<DistType>* _space;
     hnswlib::HierarchicalNSW<DistType>* _hnsw;
     size_t _dataset_size;
     size_t _dim;
@@ -293,35 +308,19 @@ class PreFilterBase {
         bool is_range = false
     ) : _dataset_size(dataset_size), _dim(dim), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
-        // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, is_range);
-        dataset_filters->transpose_inplace();
-        dataset_filters->make_bvs();
-
-        // setup data
-        std::ifstream reader(filename);
-        assert(reader.is_open());
-        size_t num_points;
-        size_t d;
-        reader.read((char*)(&num_points), sizeof(unsigned int));
-        reader.read((char*)(&d), sizeof(unsigned int));
-
-        _data = new T[dim * dataset_size];
-        reader.read((char*)_data, sizeof(T) * dim * dataset_size);
-
+        read_dataset_and_filters<T>(
+            filename, filter_filename, dataset_size, dim, num_threads, is_range, _data, dataset_filters
+        );
         auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
         // Just here for the distance calcs
         if constexpr (std::is_same<T, uint8_t>::value) {
-            SpaceType* space = new SpaceType(dim / 4);
-            _hnsw = new hnswlib::HierarchicalNSW<DistType>(space, 10, 16, 40);
+            _space = new SpaceType(dim / 4);
         } else {
-            SpaceType* space = new SpaceType(dim);
-            _hnsw = new hnswlib::HierarchicalNSW<DistType>(space, 10, 16, 40);
+            _space = new SpaceType(dim);
         }
-        SpaceType* space = new SpaceType(dim);
-
-        std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
+        _hnsw = new hnswlib::HierarchicalNSW<DistType>(_space, 10, 16, 40);
     }
 
     py::object batch_filter_search(
@@ -330,6 +329,8 @@ class PreFilterBase {
         uint64_t knn, uint64_t num_threads
     ) {
         py::array_t<unsigned int> ids({num_queries, knn});
+        py::array_t<float> times(num_queries);
+        py::array_t<size_t> cardinalities(num_queries);
 
         auto start = std::chrono::high_resolution_clock::now();
         std::vector<hnswlib::Predicate> predicate_arr;
@@ -338,9 +339,6 @@ class PreFilterBase {
         }
         auto end = std::chrono::high_resolution_clock::now();
         std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
-
-        py::array_t<float> times(num_queries);
-        py::array_t<size_t> cardinalities(num_queries);
 
         size_t bruteforce_distance_comps = 0;
         start = std::chrono::high_resolution_clock::now();
@@ -396,9 +394,9 @@ template <typename T, typename SpaceType, typename DistType>
 class HNSWBase {
  public:
     T* _data;
+    hnswlib::DatasetFilters* dataset_filters;
     hnswlib::SpaceInterface<DistType>* _space;
     hnswlib::HierarchicalNSW<DistType>* _hnsw;
-    hnswlib::DatasetFilters* dataset_filters;
     size_t _dim;
     bool _is_range;
 
@@ -413,22 +411,9 @@ class HNSWBase {
         bool is_range = false
     ) : _dim(dim), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
-        // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
-        dataset_filters->transpose_inplace();
-        dataset_filters->make_bvs();
-
-        // setup data
-        std::ifstream reader(filename);
-        assert(reader.is_open());
-        size_t num_points;
-        size_t d;
-        reader.read((char*)(&num_points), sizeof(unsigned int));
-        reader.read((char*)(&d), sizeof(unsigned int));
-
-        _data = new T[dim * dataset_size];
-        reader.read((char*)_data, sizeof(T) * dim * dataset_size);
-
+        read_dataset_and_filters<T>(
+            filename, filter_filename, dataset_size, dim, num_threads, is_range, _data, dataset_filters
+        );
         auto end = std::chrono::high_resolution_clock::now();
         std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
@@ -452,6 +437,8 @@ class HNSWBase {
      const std::vector<hnswlib::QueryFilter>& filters, uint64_t num_queries,
      uint64_t knn, size_t ef_search, uint64_t num_threads) {
         py::array_t<unsigned int> ids({num_queries, knn});
+        py::array_t<float> times(num_queries);
+        py::array_t<size_t> cardinalities(num_queries);
 
         auto start = std::chrono::high_resolution_clock::now();
         // Set ef_search of partitions
@@ -462,9 +449,6 @@ class HNSWBase {
         }
         auto end = std::chrono::high_resolution_clock::now();
         std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
-
-        py::array_t<float> times(num_queries);
-        py::array_t<size_t> cardinalities(num_queries);
 
         start = std::chrono::high_resolution_clock::now();
         hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
@@ -523,26 +507,11 @@ class AcornIndexBase {
         bool is_range = false
     ) : _dataset_size(dataset_size), _dim(dim), _bruteforce_selectivity_threshold(bruteforce_selectivity_threshold), _is_range(is_range) {
         auto start = std::chrono::high_resolution_clock::now();
-        // setup filters
-        std::cout << "Start read filters" << std::endl << std::flush;
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads, _is_range);
-        dataset_filters->transpose_inplace();
-        dataset_filters->make_bvs();
-        std::cout << "Read filters" << std::endl << std::flush;
-
-        // setup data
-        std::ifstream reader(filename);
-        assert(reader.is_open());
-        size_t num_points;
-        size_t d;
-        reader.read((char*)(&num_points), sizeof(unsigned int));
-        reader.read((char*)(&d), sizeof(unsigned int));
-        std::cout << "Num points:" << num_points << std::endl << std::flush;
-        std::cout << "d:" << d << std::endl << std::flush;
-
-        _data = new T[dim * dataset_size];
-        reader.read((char*)_data, sizeof(T) * dim * dataset_size);
-        std::cout << "Read data" << std::endl << std::flush;
+        read_dataset_and_filters<T>(
+            filename, filter_filename, dataset_size, dim, num_threads, is_range, _data, dataset_filters
+        );
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
         if constexpr (std::is_same<T, uint8_t>::value) {
             _float_data = new float[dim * dataset_size];
@@ -561,9 +530,6 @@ class AcornIndexBase {
             hnswlib::L2Space* space = new hnswlib::L2Space(dim);
             _hnsw = new hnswlib::HierarchicalNSW<float>(space, 10, 16, 40);
         }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
         start = std::chrono::high_resolution_clock::now();
         // Create acorn index
@@ -587,6 +553,9 @@ class AcornIndexBase {
     ) {
         omp_set_num_threads(num_threads);
         py::array_t<unsigned int> ids({num_queries, knn});
+        py::array_t<float> times(num_queries);
+        py::array_t<size_t> cardinalities(num_queries);
+
         acorn_gamma->acorn.efSearch = ef_search;
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -604,8 +573,6 @@ class AcornIndexBase {
         std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
         start = std::chrono::high_resolution_clock::now();
 
-        py::array_t<float> times(num_queries);
-        py::array_t<size_t> cardinalities(num_queries);
 
         hnswlib::ParallelFor(0, filters.size(), num_threads, [&](size_t i, size_t threadId) {
             std::vector<faiss::idx_t> nns2(knn);
@@ -719,20 +686,9 @@ class Caps {
         size_t num_threads
     ) : _dim(dim) {
         auto start = std::chrono::high_resolution_clock::now();
-        // setup filters
-        dataset_filters = new hnswlib::DatasetFilters(fopen(filter_filename.c_str(), "rb"), num_threads);
-
-        // setup data
-        std::ifstream reader(filename);
-        assert(reader.is_open());
-        size_t num_points;
-        size_t d;
-        reader.read((char*)(&num_points), sizeof(unsigned int));
-        reader.read((char*)(&d), sizeof(unsigned int));
-
-        _data = new float[dim * dataset_size];
-        reader.read((char*)_data, sizeof(float) * dim * dataset_size);
-        std::cout << "Read data" << std::endl << std::flush;
+        read_dataset_and_filters<float>(
+            filename, filter_filename, dataset_size, dim, num_threads, false, _data, dataset_filters // CAPS does not support range queries
+        );
         auto end = std::chrono::high_resolution_clock::now();
         std::cout << "Time to read data: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
 
@@ -786,10 +742,6 @@ class Caps {
         }
         query_attr_arr[i] = query_attr_vec;
     }); 
-        // sanity check
-    for (auto i: query_attr_arr[0])
-        std::cout << i << ' ';
-    std::cout << std::endl;
 
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Time construct predicates: " << std::chrono::duration<double>(end - start).count() << std::endl << std::flush;
